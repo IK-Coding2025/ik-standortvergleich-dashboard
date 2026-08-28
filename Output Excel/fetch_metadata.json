@@ -1,0 +1,76 @@
+{
+  "lc_lci_lev": {
+    "beschreibung": "Arbeitskosten (Niveau) – Labour Cost Index",
+    "abruf_zeitpunkt": "2026-08-25T11:43:42",
+    "zeilen": 1432,
+    "filter": {
+      "nace_r2": [
+        "C"
+      ],
+      "unit": [
+        "EUR",
+        "RT_PRE_EUR"
+      ]
+    },
+    "start_period": "2020",
+    "datei": "lc_lci_lev_raw.xlsx"
+  },
+  "nrg_pc_205": {
+    "beschreibung": "Strompreise Nicht-Haushalte",
+    "abruf_zeitpunkt": "2026-08-25T11:43:43",
+    "zeilen": 29856,
+    "filter": {},
+    "start_period": "2020",
+    "datei": "nrg_pc_205_raw.xlsx"
+  },
+  "nrg_pc_203": {
+    "beschreibung": "Gaspreise Nicht-Haushalte",
+    "abruf_zeitpunkt": "2026-08-25T11:43:51",
+    "zeilen": 38796,
+    "filter": {},
+    "start_period": "2020",
+    "datei": "nrg_pc_203_raw.xlsx"
+  },
+  "sts_inpr_m": {
+    "beschreibung": "Industrieproduktionsindex (monatlich)",
+    "abruf_zeitpunkt": "2026-08-26T08:43:07",
+    "zeilen": 5486,
+    "filter": {
+      "nace_r2": [
+        "C2221",
+        "C2222"
+      ],
+      "unit": [
+        "I21",
+        "PCH_PRE"
+      ]
+    },
+    "start_period": "2020",
+    "datei": "sts_inpr_m_raw.xlsx"
+  },
+  "sts_inppd_m": {
+    "beschreibung": "Erzeugerpreisindex Industrie, Inlandsmarkt (monatlich)",
+    "abruf_zeitpunkt": "2026-08-26T08:43:09",
+    "zeilen": 3556,
+    "filter": {
+      "nace_r2": [
+        "C2221",
+        "C2222"
+      ],
+      "unit": [
+        "I21",
+        "PCH_PRE"
+      ]
+    },
+    "start_period": "2020",
+    "datei": "sts_inppd_m_raw.xlsx"
+  },
+  "_merge": {
+    "merge_zeitpunkt": "2026-08-26T08:43:37",
+    "dateien": [
+      "lc_lci_lev_final.xlsx",
+      "merge_industrieproduktion_erzeugerpreise.xlsx",
+      "merge_energiepreise.xlsx"
+    ]
+  }
+}
