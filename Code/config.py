@@ -14,6 +14,12 @@ import logging
 import sys
 from pathlib import Path
 
+# Keine Bytecode-Caches (.pyc) schreiben: Der Ordner liegt auf einem
+# FileCloud-Team-Laufwerk; staendig neu geschriebene Cache-Dateien
+# erzeugen dort sonst Sync-Konflikte. Quell- und Datendateien werden
+# davon nicht beruehrt und bleiben stets aktuell synchronisiert.
+sys.dont_write_bytecode = True
+
 # ---------------------------------------------------------------------------
 # Ablagepfade (zwingend vorgegeben)
 # ---------------------------------------------------------------------------

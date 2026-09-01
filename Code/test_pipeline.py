@@ -5,10 +5,17 @@ Schwerpunkte gemäß QS-Vorgaben:
 - Validierung der Pflichtfilter (nace_r2, unit) vor dem Export
 
 Ausführen (im Code-Verzeichnis):
-    python -m unittest test_pipeline -v
+    python test_pipeline.py -v
+
+Hinweis: Als Hauptskript starten (nicht über 'python -m unittest'), damit
+keine Bytecode-Cache-Datei (.pyc) im FileCloud-Ordner geschrieben wird.
 """
 
+import sys
 import unittest
+
+# Keine Bytecode-Caches schreiben (FileCloud-Sync-Konflikte), siehe config.py
+sys.dont_write_bytecode = True
 
 import pandas as pd
 

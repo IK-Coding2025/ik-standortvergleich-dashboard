@@ -11,6 +11,11 @@ Ausführen:
     python fetch_data.py
 """
 
+import sys
+
+# Keine Bytecode-Caches schreiben (FileCloud-Sync-Konflikte), siehe config.py
+sys.dont_write_bytecode = True
+
 import json
 import re
 import time

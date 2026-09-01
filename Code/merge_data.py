@@ -17,6 +17,11 @@ Ausführen (nach fetch_data.py):
     python merge_data.py
 """
 
+import sys
+
+# Keine Bytecode-Caches schreiben (FileCloud-Sync-Konflikte), siehe config.py
+sys.dont_write_bytecode = True
+
 import json
 from datetime import datetime
 

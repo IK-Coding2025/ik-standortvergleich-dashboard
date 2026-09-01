@@ -6,6 +6,11 @@ Danach das Dashboard starten mit:
     streamlit run dashboard.py
 """
 
+import sys
+
+# Keine Bytecode-Caches schreiben (FileCloud-Sync-Konflikte), siehe config.py
+sys.dont_write_bytecode = True
+
 import fetch_data
 import merge_data
 
