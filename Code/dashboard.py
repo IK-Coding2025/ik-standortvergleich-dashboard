@@ -725,7 +725,12 @@ def main() -> None:
     logo = finde_logo()
     if logo:
         spalte_l, spalte_m, spalte_r = st.columns([1, 1, 1])
-        spalte_m.image(logo, use_column_width=True)
+        try:
+            # Streamlit >= 1.40 (Cloud): use_container_width
+            spalte_m.image(logo, use_container_width=True)
+        except TypeError:
+            # Streamlit <= 1.39 (lokal): use_column_width
+            spalte_m.image(logo, use_column_width=True)
     st.markdown(
         f"<h1 style='text-align:center; color:{IK_BLAU}; margin-bottom:0'>"
         "IK Dashboard zum Standortvergleich Deutschland – Europa</h1>",
