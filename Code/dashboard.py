@@ -14,6 +14,7 @@ import sys
 # Keine Bytecode-Caches schreiben (FileCloud-Sync-Konflikte), siehe config.py
 sys.dont_write_bytecode = True
 
+import base64
 import json
 import re
 
@@ -36,21 +37,27 @@ st.set_page_config(
 )
 
 # Tab-Leiste (Themen-Auswahlmenü) größer und fett darstellen; der aktive
-# Tab wird in IK-Blau hervorgehoben. Selektoren decken alte und neue
-# Streamlit-Versionen ab (lokal 1.39, Cloud neuer).
+# Tab wird in IK-Blau hervorgehoben. Selektoren nutzen die stabilen
+# ARIA-Rollen (tablist/tab) plus die data-testids älterer und neuerer
+# Streamlit-Versionen; die Unterelemente erben Schriftgröße und -gewicht.
 st.markdown(
     f"""
     <style>
+    [role="tablist"] button,
+    [data-testid="stTabs"] button,
     button[data-baseweb="tab"],
     button[data-testid="stTab"] {{
         font-size: 1.2rem !important;
         font-weight: 700 !important;
     }}
-    button[data-baseweb="tab"] p,
-    button[data-testid="stTab"] p {{
-        font-size: 1.2rem !important;
-        font-weight: 700 !important;
+    [role="tablist"] button *,
+    [data-testid="stTabs"] button *,
+    button[data-baseweb="tab"] *,
+    button[data-testid="stTab"] * {{
+        font-size: inherit !important;
+        font-weight: inherit !important;
     }}
+    [role="tab"][aria-selected="true"],
     button[data-baseweb="tab"][aria-selected="true"],
     button[data-testid="stTab"][aria-selected="true"] {{
         color: {IK_BLAU} !important;
@@ -753,16 +760,19 @@ def main() -> None:
 
     # --- Header: Logo mittig, Titel, Untertitel mit Datenstand --------------
     # Header im Stil des IK-Wirtschafts-Dashboards: kleines zentriertes
-    # Logo, Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
+    # Logo (feste Pixelbreite, versionsunabhängig via HTML-Einbettung),
+    # Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
     logo = finde_logo()
     if logo:
-        spalte_l, spalte_m, spalte_r = st.columns([2, 1, 2])
-        try:
-            # Streamlit >= 1.40 (Cloud): use_container_width
-            spalte_m.image(logo, use_container_width=True)
-        except TypeError:
-            # Streamlit <= 1.39 (lokal): use_column_width
-            spalte_m.image(logo, use_column_width=True)
+        logo_b64 = base64.b64encode(
+            open(logo, "rb").read()
+        ).decode()
+        st.markdown(
+            "<div style='text-align:center'>"
+            f"<img src='data:image/jpeg;base64,{logo_b64}' width='180'>"
+            "</div>",
+            unsafe_allow_html=True,
+        )
     st.markdown(
         f"<h1 style='text-align:center; color:{IK_BLAU}; margin-bottom:0'>"
         "IK Dashboard zum Standortvergleich Deutschland – Europa</h1>",
