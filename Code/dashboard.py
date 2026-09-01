@@ -747,9 +747,11 @@ def main() -> None:
     df_arbeit, df_industrie, df_energie = lade_alle_tabellen()
 
     # --- Header: Logo mittig, Titel, Untertitel mit Datenstand --------------
+    # Header im Stil des IK-Wirtschafts-Dashboards: kleines zentriertes
+    # Logo, Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
     logo = finde_logo()
     if logo:
-        spalte_l, spalte_m, spalte_r = st.columns([1, 1, 1])
+        spalte_l, spalte_m, spalte_r = st.columns([2, 1, 2])
         try:
             # Streamlit >= 1.40 (Cloud): use_container_width
             spalte_m.image(logo, use_container_width=True)
@@ -759,6 +761,12 @@ def main() -> None:
     st.markdown(
         f"<h1 style='text-align:center; color:{IK_BLAU}; margin-bottom:0'>"
         "IK Dashboard zum Standortvergleich Deutschland – Europa</h1>",
+        unsafe_allow_html=True,
+    )
+    st.markdown(
+        f"<p style='text-align:center; color:{IK_BLAU}; font-size:1.4rem; "
+        "font-weight:600; margin-top:0.2rem'>"
+        "Kunststoffverpackungen und -folienindustrie</p>",
         unsafe_allow_html=True,
     )
     st.markdown(
