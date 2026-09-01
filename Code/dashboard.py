@@ -44,21 +44,28 @@ st.markdown(
     f"""
     <style>
     [role="tablist"] button,
+    [role="tablist"] button p,
+    [role="tablist"] button span,
+    [role="tablist"] button div,
     [data-testid="stTabs"] button,
+    [data-testid="stTabs"] button p,
+    [data-testid="stTabs"] button span,
+    [data-testid="stTabs"] button div,
     button[data-baseweb="tab"],
-    button[data-testid="stTab"] {{
-        font-size: 1.2rem !important;
+    button[data-baseweb="tab"] p,
+    button[data-testid="stTab"],
+    button[data-testid="stTab"] p,
+    [role="tab"],
+    [role="tab"] p,
+    [role="tab"] span {{
+        font-size: 1.25rem !important;
         font-weight: 700 !important;
     }}
-    [role="tablist"] button *,
-    [data-testid="stTabs"] button *,
-    button[data-baseweb="tab"] *,
-    button[data-testid="stTab"] * {{
-        font-size: inherit !important;
-        font-weight: inherit !important;
-    }}
     [role="tab"][aria-selected="true"],
+    [role="tab"][aria-selected="true"] p,
+    [role="tab"][aria-selected="true"] span,
     button[data-baseweb="tab"][aria-selected="true"],
+    button[data-baseweb="tab"][aria-selected="true"] p,
     button[data-testid="stTab"][aria-selected="true"] {{
         color: {IK_BLAU} !important;
     }}
