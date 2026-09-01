@@ -30,6 +30,31 @@ st.set_page_config(
     layout="wide",
 )
 
+# Tab-Leiste (Themen-Auswahlmenü) größer und fett darstellen; der aktive
+# Tab wird in IK-Blau hervorgehoben. Selektoren decken alte und neue
+# Streamlit-Versionen ab (lokal 1.39, Cloud neuer).
+st.markdown(
+    f"""
+    <style>
+    button[data-baseweb="tab"],
+    button[data-testid="stTab"] {{
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+    }}
+    button[data-baseweb="tab"] p,
+    button[data-testid="stTab"] p {{
+        font-size: 1.2rem !important;
+        font-weight: 700 !important;
+    }}
+    button[data-baseweb="tab"][aria-selected="true"],
+    button[data-testid="stTab"][aria-selected="true"] {{
+        color: {IK_BLAU} !important;
+    }}
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 
 # ---------------------------------------------------------------------------
 # Hilfsfunktionen
