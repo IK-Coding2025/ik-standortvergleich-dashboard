@@ -1073,10 +1073,14 @@ def main() -> None:
                 set(df_inpr["nace_r2_label"].dropna())
                 | set(df_inppd["nace_r2_label"].dropna())
             )
+            # Standard: Klassenebene (C2221/C2222, IK-spezifisch)
+            klassen = [
+                n for n in nace_optionen if not n.startswith("C22 – ")
+            ]
             auswahl_nace = st.multiselect(
                 "NACE-Abschnitt",
                 options=nace_optionen,
-                default=nace_optionen,
+                default=klassen or nace_optionen,
                 format_func=nace_kurz,
             )
         with f2:
@@ -1100,22 +1104,57 @@ def main() -> None:
                 default=standard_label(unit_optionen, "=100"),
             )
         st.caption(
-            "Hinweis: Die Bereinigungsauswahl gilt nur für den "
+            "Hinweise: Die Bereinigungsauswahl gilt nur für den "
             "Produktionsindex – Erzeugerpreise liegen ausschließlich "
             "unbereinigt vor. EU-Aggregate des Produktionsindex "
-            "veröffentlicht Eurostat nur kalender- bzw. saisonbereinigt "
-            "(keine unbereinigten Werte)."
+            "veröffentlicht Eurostat nur kalender- bzw. saisonbereinigt. "
+            "Die Klassenebene (C2221/C2222) melden nach der EBS-Verordnung "
+            "nur die größten Mitgliedstaaten; kleinere und mittlere Länder "
+            "liefern nur die Divisionsebene C22 – bei deren Auswahl wird "
+            "der NACE-Abschnitt daher automatisch angeglichen."
         )
+        # Automatischer NACE-Abgleich: Kleine/mittlere Länder melden keine
+        # Klassenebene (C2221/C2222). Wird ein solches Land gewählt, muss
+        # die Vergleichskategorie für ALLE ausgewählten Länder identisch
+        # sein -> automatisch auf C22 (Divisionsebene) schalten.
+        klassen_geos = set(
+            df_inpr.loc[
+                df_inpr["nace_r2"].isin(["C2221", "C2222"]), "geo_label"
+            ]
+        ) | set(
+            df_inppd.loc[
+                df_inppd["nace_r2"].isin(["C2221", "C2222"]), "geo_label"
+            ]
+        )
+        nur_c22_geos = [g for g in auswahl_geos if g not in klassen_geos]
+        if nur_c22_geos:
+            auswahl_nace_effektiv = [
+                n for n in nace_optionen if n.startswith("C22 – ")
+            ]
+            st.warning(
+                "**Hinweis zum Ländervergleich:** "
+                + ", ".join(f"**{g}**" for g in nur_c22_geos)
+                + " meldet/melden an Eurostat Kurzzeitstatistiken nur auf "
+                "der Ebene **C22** (Herstellung von Gummi- und "
+                "Kunststoffwaren). Ein Vergleich auf Klassenebene "
+                "(C2221/C2222, z. B. Kunststoffverpackungen) ist für diese "
+                "Länder nicht möglich (EBS-Verordnung: 3-/4-stellige NACE "
+                "nur für die größten Mitgliedstaaten). Damit die "
+                "Vergleichskategorie identisch bleibt, wurde der "
+                "NACE-Abschnitt automatisch auf **C22** gesetzt."
+            )
+        else:
+            auswahl_nace_effektiv = auswahl_nace
         # Die Bereinigungsauswahl gilt nur für den Produktionsindex;
         # Erzeugerpreise liegen ohnehin nur unbereinigt (NSA) vor.
         df_prod = prod_basis[
-            prod_basis["nace_r2_label"].isin(auswahl_nace)
+            prod_basis["nace_r2_label"].isin(auswahl_nace_effektiv)
             & prod_basis["s_adj_label"].isin(auswahl_s_adj)
             & prod_basis["unit_label"].isin(auswahl_unit)
             & prod_basis["value_inpr"].notna()
         ]
         df_preis = preis_basis[
-            preis_basis["nace_r2_label"].isin(auswahl_nace)
+            preis_basis["nace_r2_label"].isin(auswahl_nace_effektiv)
             & preis_basis["unit_label"].isin(auswahl_unit)
             & preis_basis["value_inppd"].notna()
         ]

@@ -33,12 +33,13 @@
   },
   "sts_inpr_m": {
     "beschreibung": "Industrieproduktionsindex (monatlich)",
-    "abruf_zeitpunkt": "2026-08-26T08:43:07",
-    "zeilen": 5486,
+    "abruf_zeitpunkt": "2026-09-03T10:18:50",
+    "zeilen": 13522,
     "filter": {
       "nace_r2": [
         "C2221",
-        "C2222"
+        "C2222",
+        "C22"
       ],
       "unit": [
         "I21",
@@ -50,12 +51,13 @@
   },
   "sts_inppd_m": {
     "beschreibung": "Erzeugerpreisindex Industrie, Inlandsmarkt (monatlich)",
-    "abruf_zeitpunkt": "2026-08-26T08:43:09",
-    "zeilen": 3556,
+    "abruf_zeitpunkt": "2026-09-03T10:20:37",
+    "zeilen": 8090,
     "filter": {
       "nace_r2": [
         "C2221",
-        "C2222"
+        "C2222",
+        "C22"
       ],
       "unit": [
         "I21",
@@ -66,7 +68,7 @@
     "datei": "sts_inppd_m_raw.xlsx"
   },
   "_merge": {
-    "merge_zeitpunkt": "2026-08-26T08:43:37",
+    "merge_zeitpunkt": "2026-09-03T10:21:08",
     "dateien": [
       "lc_lci_lev_final.xlsx",
       "merge_industrieproduktion_erzeugerpreise.xlsx",

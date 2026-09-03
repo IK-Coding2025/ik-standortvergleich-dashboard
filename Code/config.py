@@ -89,11 +89,11 @@ DATASETS = {
     "sts_inpr_m": {
         "beschreibung": "Industrieproduktionsindex (monatlich)",
         "filter": {
-            "nace_r2": ["C2221", "C2222"],       # Kunststofferzeugnisse
+            "nace_r2": ["C2221", "C2222", "C22"],  # Kunststofferzeugnisse + Gummi/Kunststoff (C22 für volle Länderabdeckung)
             "unit": ["I21", "PCH_PRE"],
         },
         "pflichtfilter": {
-            "nace_r2": ["C2221", "C2222"],
+            "nace_r2": ["C2221", "C2222", "C22"],
             "unit": ["I21", "PCH_PRE"],
         },
         "datei": "sts_inpr_m_raw.xlsx",
@@ -101,11 +101,11 @@ DATASETS = {
     "sts_inppd_m": {
         "beschreibung": "Erzeugerpreisindex Industrie, Inlandsmarkt (monatlich)",
         "filter": {
-            "nace_r2": ["C2221", "C2222"],
+            "nace_r2": ["C2221", "C2222", "C22"],
             "unit": ["I21", "PCH_PRE"],
         },
         "pflichtfilter": {
-            "nace_r2": ["C2221", "C2222"],
+            "nace_r2": ["C2221", "C2222", "C22"],
             "unit": ["I21", "PCH_PRE"],
         },
         "datei": "sts_inppd_m_raw.xlsx",
