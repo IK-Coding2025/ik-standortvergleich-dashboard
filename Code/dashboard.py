@@ -1,9 +1,10 @@
 """IK Standortvergleich Deutschland – Europa (Streamlit-Dashboard).
 
-Liest die drei finalen Excel-Tabellen aus dem Output-Pfad und visualisiert
-Arbeitskosten, Energiepreise sowie Industrieproduktion & Erzeugerpreise
-in drei Tabs. Layout orientiert an https://ikdashboard.streamlit.app/
-(Kopfzeile mit Logo, Seitenleiste für Filter, KPI-Kacheln, Charts, Footer).
+Liest die finalen Excel-Tabellen (Arbeitskosten, Energiepreise) sowie die
+STS-Rohdaten (Industrieproduktion, Erzeugerpreise) aus dem Output-Pfad und
+visualisiert sie in drei Tabs. Layout orientiert an
+https://ikdashboard.streamlit.app/ (Kopfzeile mit Logo, Seitenleiste für
+Filter, KPI-Kacheln, Charts, Footer).
 
 Starten:
     streamlit run dashboard.py
@@ -736,13 +737,53 @@ def anzeige_tabelle(df: pd.DataFrame) -> pd.DataFrame:
     return anzeige[erste + werte + rest]
 
 
+def nace_label_kombiniere(df: pd.DataFrame) -> pd.DataFrame:
+    """Kombiniert NACE-Code und Bezeichnung ('C2221 – Herstellung von …').
+
+    Die Rohdaten enthalten getrennte Code-/Label-Spalten; in den finalen
+    Dateien ist die Kombination bereits enthalten (merge_data.py).
+    """
+    if "nace_r2" in df.columns and "nace_r2_label" in df.columns:
+        df = df.copy()
+        kombiniert = (
+            df["nace_r2"].astype(str) + " – " + df["nace_r2_label"].astype(str)
+        )
+        df["nace_r2_label"] = kombiniert.where(
+            df["nace_r2"].notna(), df["nace_r2_label"]
+        )
+    return df
+
+
+def ohne_code_spalten(df: pd.DataFrame) -> pd.DataFrame:
+    """Entfernt Abkürzungs-Spalten, zu denen eine Label-Spalte existiert
+    (für die Anzeige der Rohdaten, die noch Code-Spalten enthalten)."""
+    zu_entfernen = [
+        spalte
+        for spalte in df.columns
+        if not spalte.endswith("_label")
+        and f"{spalte}_label" in df.columns
+        and spalte != "time"
+    ]
+    return df.drop(columns=zu_entfernen, errors="ignore")
+
+
 # ---------------------------------------------------------------------------
 # Daten laden (mit Fehlermeldung bei fehlenden Dateien)
 # ---------------------------------------------------------------------------
 def lade_alle_tabellen():
-    """Lädt die drei finalen Tabellen oder bricht mit Fehlermeldung ab."""
-    dateien = [config.FINAL_LC, config.FINAL_MERGE_INDUSTRIE,
-               config.FINAL_MERGE_ENERGIE]
+    """Lädt die benötigten Tabellen oder bricht mit Fehlermeldung ab.
+
+    Arbeitskosten und Energiepreise kommen aus den finalen (gemergten)
+    Dateien. Industrieproduktion & Erzeugerpreise werden direkt aus den
+    Rohdaten der beiden STS-Datensätze gelesen (vollständige Länder-
+    abdeckung); die Merge-Datei bleibt separater Pipeline-Output.
+    """
+    dateien = [
+        config.FINAL_LC,
+        config.FINAL_MERGE_ENERGIE,
+        config.DATASETS["sts_inpr_m"]["datei"],
+        config.DATASETS["sts_inppd_m"]["datei"],
+    ]
     fehlend = [d for d in dateien if not (config.OUTPUT_DIR / d).exists()]
     if fehlend:
         st.error(
@@ -763,7 +804,16 @@ def lade_alle_tabellen():
 # Seitenaufbau
 # ---------------------------------------------------------------------------
 def main() -> None:
-    df_arbeit, df_industrie, df_energie = lade_alle_tabellen()
+    df_arbeit, df_energie, df_inpr, df_inppd = lade_alle_tabellen()
+    # Rohdaten für Tab 3 vorbereiten: NACE-Code in die Bezeichnung
+    # aufnehmen und Wert-Spalten herkunftsbezogen benennen (gleiche Namen
+    # wie in der bisherigen Merge-Datei)
+    df_inpr = nace_label_kombiniere(df_inpr).rename(
+        columns={"value": "value_inpr"}
+    )
+    df_inppd = nace_label_kombiniere(df_inppd).rename(
+        columns={"value": "value_inppd"}
+    )
 
     # --- Header: Logo mittig, Titel, Untertitel mit Datenstand --------------
     # Header im Stil des IK-Wirtschafts-Dashboards: kleines zentriertes
@@ -805,7 +855,8 @@ def main() -> None:
     alle_geos = sorted(
         set(df_arbeit["geo_label"].dropna())
         | set(df_energie["geo_label"].dropna())
-        | set(df_industrie["geo_label"].dropna())
+        | set(df_inpr["geo_label"].dropna())
+        | set(df_inppd["geo_label"].dropna())
     )
     # Standardauswahl: Deutschland + EU-27
     standard_geos = [
@@ -824,7 +875,7 @@ def main() -> None:
 
     alle_jahre = pd.concat(
         [df_arbeit["time_date"], df_energie["time_date"],
-         df_industrie["time_date"]]
+         df_inpr["time_date"], df_inppd["time_date"]]
     ).dt.year
     jahr_min = max(int(alle_jahre.min()), int(config.START_PERIOD))
     jahr_max = int(alle_jahre.max())
@@ -1006,15 +1057,22 @@ def main() -> None:
 
     # == Tab 3: Industrieproduktion & Erzeugerpreise ==========================
     with tab_industrie:
-        df = zeitraum_filter(
-            df_industrie[df_industrie["geo_label"].isin(auswahl_geos)],
-            *von_bis,
+        # Quelle: Rohdaten der beiden STS-Datensätze (vollständige
+        # Länderabdeckung, inkl. aller von Eurostat gemeldeten Werte)
+        prod_basis = zeitraum_filter(
+            df_inpr[df_inpr["geo_label"].isin(auswahl_geos)], *von_bis
         )
-        # Optionen aus dem Gesamtdatensatz ableiten, damit stets alle
+        preis_basis = zeitraum_filter(
+            df_inppd[df_inppd["geo_label"].isin(auswahl_geos)], *von_bis
+        )
+        # Optionen aus den Gesamtdatensätzen ableiten, damit stets alle
         # auswählbaren Ausprägungen sichtbar bleiben (inkl. der gewählten)
         f1, f2, f3 = st.columns(3)
         with f1:
-            nace_optionen = optionen_label(df_industrie, "nace_r2_label")
+            nace_optionen = sorted(
+                set(df_inpr["nace_r2_label"].dropna())
+                | set(df_inppd["nace_r2_label"].dropna())
+            )
             auswahl_nace = st.multiselect(
                 "NACE-Abschnitt",
                 options=nace_optionen,
@@ -1022,7 +1080,7 @@ def main() -> None:
                 format_func=nace_kurz,
             )
         with f2:
-            s_adj_optionen = optionen_label(df_industrie, "s_adj_label")
+            s_adj_optionen = optionen_label(df_inpr, "s_adj_label")
             auswahl_s_adj = st.multiselect(
                 "Kalender-/Saisonbereinigung (Produktionsindex)",
                 options=s_adj_optionen,
@@ -1032,7 +1090,10 @@ def main() -> None:
                 format_func=label_kurz_klammer,
             )
         with f3:
-            unit_optionen = optionen_label(df_industrie, "unit_label")
+            unit_optionen = sorted(
+                set(df_inpr["unit_label"].dropna())
+                | set(df_inppd["unit_label"].dropna())
+            )
             auswahl_unit = st.multiselect(
                 "Maßeinheit",
                 options=unit_optionen,
@@ -1045,12 +1106,21 @@ def main() -> None:
             "veröffentlicht Eurostat nur kalender- bzw. saisonbereinigt "
             "(keine unbereinigten Werte)."
         )
-        df = df[
-            df["nace_r2_label"].isin(auswahl_nace)
-            & df["unit_label"].isin(auswahl_unit)
+        # Die Bereinigungsauswahl gilt nur für den Produktionsindex;
+        # Erzeugerpreise liegen ohnehin nur unbereinigt (NSA) vor.
+        df_prod = prod_basis[
+            prod_basis["nace_r2_label"].isin(auswahl_nace)
+            & prod_basis["s_adj_label"].isin(auswahl_s_adj)
+            & prod_basis["unit_label"].isin(auswahl_unit)
+            & prod_basis["value_inpr"].notna()
+        ]
+        df_preis = preis_basis[
+            preis_basis["nace_r2_label"].isin(auswahl_nace)
+            & preis_basis["unit_label"].isin(auswahl_unit)
+            & preis_basis["value_inppd"].notna()
         ]
 
-        if df.empty:
+        if df_prod.empty and df_preis.empty:
             st.info("Keine Daten für die gewählte Filterkombination.")
         else:
             if len(auswahl_unit) == 1:
@@ -1063,13 +1133,6 @@ def main() -> None:
                 )
             else:
                 unit_kurz = "Wert"
-            # Die Bereinigungsauswahl gilt nur für den Produktionsindex;
-            # Erzeugerpreise liegen ohnehin nur unbereinigt (NSA) vor.
-            df_prod = df[
-                df["value_inpr"].notna()
-                & df["s_adj_label"].isin(auswahl_s_adj)
-            ]
-            df_preis = df[df["value_inppd"].notna()]
             # Zwei getrennte Abbildungen: Produktion links, Preise rechts
             spalte_prod, spalte_preis = st.columns(2)
             with spalte_prod:
@@ -1115,7 +1178,9 @@ def main() -> None:
             lesebeispiel_industrie(df_prod, df_preis, auswahl_unit)
             with st.expander("Daten anzeigen"):
                 st.dataframe(
-                    anzeige_tabelle(pd.concat([df_prod, df_preis])).rename(
+                    anzeige_tabelle(
+                        ohne_code_spalten(pd.concat([df_prod, df_preis]))
+                    ).rename(
                         columns={
                             "value_inpr": "value_inpr "
                             "(Industrieproduktionsindex)",
