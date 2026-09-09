@@ -1485,7 +1485,7 @@ def main() -> None:
             "Verpackungsabfallmenge gesetzt."
         )
         st.info(
-            "Zielvorgaben Verpackungsverordnung (Stand 31.12.2025): "
+            "Zielvorgaben Recyclingquoten (Stichtag 31.12.2025): "
             "Gesamtverpackungsaufkommen mindestens **65 %**; "
             "Papier, Pappe, Karton **75 %**; Glas **70 %**; "
             "Eisenmetalle **70 %**; Aluminium **50 %**; "
