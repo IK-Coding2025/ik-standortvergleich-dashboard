@@ -16,6 +16,7 @@ import sys
 sys.dont_write_bytecode = True
 
 import base64
+import colorsys
 import json
 import re
 
@@ -31,6 +32,78 @@ FARBPALETTE = [
     "#2E3192", "#E30613", "#009FE3", "#93C01F", "#F39200",
     "#662483", "#009036", "#8C8C8C", "#DA9A00", "#00B2A9",
 ]
+
+
+def _hex_to_rgb(hexcolor: str) -> tuple[int, int, int]:
+    """Konvertiert '#RRGGBB' in (r, g, b)."""
+    hexcolor = hexcolor.lstrip("#")
+    return tuple(int(hexcolor[i:i + 2], 16) for i in (0, 2, 4))
+
+
+def _rgb_to_hex(r: int, g: int, b: int) -> str:
+    """Konvertiert (r, g, b) in '#RRGGBB'."""
+    return f"#{r:02x}{g:02x}{b:02x}"
+
+
+def _basis_hsl(geo_label: str, geos: list) -> tuple[float, float, float]:
+    """Basisfarbe: Deutschland = IK-Blau, alle anderen = Rottöne."""
+    if str(geo_label) == "Deutschland":
+        r, g, b = _hex_to_rgb(IK_BLAU)
+        h, l, s = colorsys.rgb_to_hls(r / 255, g / 255, b / 255)
+        return h * 360, s, l
+    non_de = sorted(g for g in geos if g != "Deutschland")
+    idx = non_de.index(str(geo_label)) if str(geo_label) in non_de else 0
+    # Rotorange-Palette (0 = rot, 20 = orangerot, 40 = orange)
+    return (idx * 20) % 60, 0.85, 0.50
+
+
+def _gruppenschluessel_liste(
+    daten: list[tuple[pd.DataFrame, str]], gruppierung: list
+) -> list[tuple]:
+    """Sammelt eindeutige Gruppenschlüssel aus einem oder mehreren DataFrames."""
+    keys = []
+    for df, wert_spalte in daten:
+        if df.empty or wert_spalte not in df.columns:
+            continue
+        for schluessel, _ in df.dropna(subset=[wert_spalte]).groupby(
+            gruppierung, sort=True
+        ):
+            if not isinstance(schluessel, tuple):
+                schluessel = (schluessel,)
+            keys.append(schluessel)
+    gesehen = set()
+    unique_keys = []
+    for k in keys:
+        if k not in gesehen:
+            unique_keys.append(k)
+            gesehen.add(k)
+    return unique_keys
+
+
+def _farbe_mapping(
+    daten: list[tuple[pd.DataFrame, str]], gruppierung: list
+) -> dict:
+    """Ordnet jedem Gruppenschlüssel eine Farbe zu.
+
+    Deutschland erhält Blautöne, andere ausgewählte Länder Rottöne.
+    Mehrere Unterreihen pro Land (z. B. zusätzliche Einheiten) werden
+    durch abgestufte Helligkeit voneinander unterschieden.
+    """
+    keys = _gruppenschluessel_liste(daten, gruppierung)
+    geos = sorted({k[0] for k in keys})
+    farben = {}
+    for geo in geos:
+        sub_keys = [k for k in keys if k[0] == geo]
+        n = len(sub_keys)
+        h, s, _ = _basis_hsl(geo, geos)
+        for i, k in enumerate(sub_keys):
+            # Helligkeit von 35 % bis 70 % abstuften
+            new_l = 0.35 + (0.35 * i / max(n - 1, 1))
+            r, g, b = colorsys.hls_to_rgb(h / 360, new_l, s)
+            farben[k] = _rgb_to_hex(
+                int(r * 255), int(g * 255), int(b * 255)
+            )
+    return farben
 
 st.set_page_config(
     page_title="IK Dashboard zum Standortvergleich Deutschland – Europa",
@@ -288,8 +361,9 @@ def linien_chart(
     """
     fig = go.Figure()
     gruppiert = df.dropna(subset=[wert_spalte]).groupby(gruppierung, sort=True)
+    farben = _farbe_mapping([(df, wert_spalte)], gruppierung)
     mehrere_gruppen = len(df[gruppierung[-1]].unique()) > 1 if gruppierung else False
-    for i, (schluessel, teil) in enumerate(gruppiert):
+    for schluessel, teil in gruppiert:
         if not isinstance(schluessel, tuple):
             schluessel = (schluessel,)
         teil = teil.sort_values("time_date")
@@ -302,7 +376,7 @@ def linien_chart(
                 y=teil[wert_spalte],
                 mode="lines+markers",
                 name=name,
-                line=dict(color=FARBPALETTE[i % len(FARBPALETTE)]),
+                line=dict(color=farben.get(schluessel, IK_BLAU)),
                 hovertemplate=(
                     "%{x|%d.%m.%Y}<br>Wert: %{y:."
                     f"{hover_nachkommastellen}"
@@ -338,7 +412,9 @@ def dual_achsen_chart(
     die Legende horizontal unter dem Diagramm.
     """
     fig = go.Figure()
-    farb_index = 0
+    farben = _farbe_mapping(
+        [(df_links, wert_links), (df_rechts, wert_rechts)], gruppierung
+    )
     for wert, daten, gestrichelt, y_achse, prefix in (
         (wert_links, df_links, False, "y1", prefix_links),
         (wert_rechts, df_rechts, True, "y2", prefix_rechts),
@@ -350,8 +426,7 @@ def dual_achsen_chart(
                 schluessel = (schluessel,)
             teil = teil.sort_values("time_date")
             name = prefix + " · ".join(str(s) for s in schluessel)
-            farbe = FARBPALETTE[farb_index % len(FARBPALETTE)]
-            farb_index += 1
+            farbe = farben.get(schluessel, IK_BLAU)
             fig.add_trace(
                 go.Scatter(
                     x=teil["time_date"],
