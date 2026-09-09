@@ -1,7 +1,7 @@
 {
   "lc_lci_lev": {
     "beschreibung": "Arbeitskosten (Niveau) – Labour Cost Index",
-    "abruf_zeitpunkt": "2026-08-25T11:43:42",
+    "abruf_zeitpunkt": "2026-09-09T15:11:14",
     "zeilen": 1432,
     "filter": {
       "nace_r2": [
@@ -17,7 +17,7 @@
   },
   "nrg_pc_205": {
     "beschreibung": "Strompreise Nicht-Haushalte",
-    "abruf_zeitpunkt": "2026-08-25T11:43:43",
+    "abruf_zeitpunkt": "2026-09-09T15:11:14",
     "zeilen": 29856,
     "filter": {},
     "start_period": "2020",
@@ -25,7 +25,7 @@
   },
   "nrg_pc_203": {
     "beschreibung": "Gaspreise Nicht-Haushalte",
-    "abruf_zeitpunkt": "2026-08-25T11:43:51",
+    "abruf_zeitpunkt": "2026-09-09T15:11:21",
     "zeilen": 38796,
     "filter": {},
     "start_period": "2020",
@@ -33,8 +33,8 @@
   },
   "sts_inpr_m": {
     "beschreibung": "Industrieproduktionsindex (monatlich)",
-    "abruf_zeitpunkt": "2026-09-08T10:01:12",
-    "zeilen": 33687,
+    "abruf_zeitpunkt": "2026-09-09T15:11:31",
+    "zeilen": 33739,
     "filter": {
       "nace_r2": [
         "C2221",
@@ -57,8 +57,8 @@
   },
   "sts_inppd_m": {
     "beschreibung": "Erzeugerpreisindex Industrie, Inlandsmarkt (monatlich)",
-    "abruf_zeitpunkt": "2026-09-08T10:01:25",
-    "zeilen": 19940,
+    "abruf_zeitpunkt": "2026-09-09T15:11:43",
+    "zeilen": 19956,
     "filter": {
       "nace_r2": [
         "C2221",
@@ -80,17 +80,21 @@
     "datei": "sts_inppd_m_raw.xlsx"
   },
   "_merge": {
-    "merge_zeitpunkt": "2026-09-09T11:31:15",
+    "merge_zeitpunkt": "2026-09-09T15:46:15",
     "dateien": [
       "lc_lci_lev_final.xlsx",
       "merge_industrieproduktion_erzeugerpreise.xlsx",
       "merge_energiepreise.xlsx",
-      "env_waspac_final.xlsx"
+      "env_waspac_final.xlsx",
+      "merge_bevoelkerung.xlsx",
+      "proj_25ndbi_final.xlsx",
+      "lfsa_egan22d_final.xlsx",
+      "jvs_q_r21_final.xlsx"
     ]
   },
   "env_waspac": {
     "beschreibung": "Verpackungsabfälle und Recyclingquoten",
-    "abruf_zeitpunkt": "2026-09-09T11:30:23",
+    "abruf_zeitpunkt": "2026-09-09T15:11:51",
     "zeilen": 44339,
     "filter": {
       "waste": [
@@ -121,5 +125,170 @@
     },
     "start_period": "2013",
     "datei": "env_waspac_raw.xlsx"
+  },
+  "demo_r_gind3": {
+    "beschreibung": "Bevölkerung - regionale Daten (1. Januar)",
+    "abruf_zeitpunkt": "2026-09-09T15:11:59",
+    "zeilen": 1145,
+    "filter": {
+      "indic_de": [
+        "JAN"
+      ],
+      "geo": [
+        "BE",
+        "BG",
+        "CZ",
+        "DK",
+        "DE",
+        "EE",
+        "IE",
+        "EL",
+        "ES",
+        "FR",
+        "HR",
+        "IT",
+        "CY",
+        "LV",
+        "LT",
+        "LU",
+        "HU",
+        "MT",
+        "NL",
+        "AT",
+        "PL",
+        "PT",
+        "RO",
+        "SI",
+        "SK",
+        "FI",
+        "SE",
+        "DE1",
+        "DE2",
+        "DE3",
+        "DE4",
+        "DE5",
+        "DE6",
+        "DE7",
+        "DE8",
+        "DE9",
+        "DEA",
+        "DEB",
+        "DEC",
+        "DED",
+        "DEE",
+        "DEF",
+        "DEG"
+      ]
+    },
+    "start_period": "2000",
+    "datei": "demo_r_gind3_raw.xlsx"
+  },
+  "demo_gind": {
+    "beschreibung": "Bevölkerung - EU-27 Aggregat (1. Januar)",
+    "abruf_zeitpunkt": "2026-09-09T15:12:01",
+    "zeilen": 27,
+    "filter": {
+      "geo": [
+        "EU27_2020"
+      ],
+      "indic_de": [
+        "JAN"
+      ]
+    },
+    "start_period": "2000",
+    "datei": "demo_gind_raw.xlsx"
+  },
+  "proj_25ndbi": {
+    "beschreibung": "Bevölkerungsprojektionen 2025-2100",
+    "abruf_zeitpunkt": "2026-09-09T15:45:16",
+    "zeilen": 29792,
+    "filter": {
+      "geo": [
+        "BE",
+        "BG",
+        "CZ",
+        "DK",
+        "DE",
+        "EE",
+        "IE",
+        "EL",
+        "ES",
+        "FR",
+        "HR",
+        "IT",
+        "CY",
+        "LV",
+        "LT",
+        "LU",
+        "HU",
+        "MT",
+        "NL",
+        "AT",
+        "PL",
+        "PT",
+        "RO",
+        "SI",
+        "SK",
+        "FI",
+        "SE",
+        "EU27_2020"
+      ],
+      "indic_de": [
+        "JAN",
+        "PC_Y15_64"
+      ],
+      "projection": [
+        "BSL",
+        "LFRT",
+        "LMRT",
+        "HMIGR",
+        "LMIGR",
+        "NMIGR",
+        "DCONV"
+      ]
+    },
+    "start_period": "2025",
+    "datei": "proj_25ndbi_raw.xlsx"
+  },
+  "jvs_q_r21": {
+    "beschreibung": "Quote der offenen Stellen (Job Vacancy Rate)",
+    "abruf_zeitpunkt": "2026-09-09T15:12:04",
+    "zeilen": 1197,
+    "filter": {
+      "nace_r2_1": [
+        "C",
+        "A-T"
+      ],
+      "indic_em": [
+        "JVR"
+      ],
+      "sizeclas": [
+        "TOTAL"
+      ],
+      "s_adj": [
+        "SA"
+      ]
+    },
+    "start_period": "2016",
+    "datei": "jvs_q_r21_raw.xlsx"
+  },
+  "lfsa_egan22d": {
+    "beschreibung": "Erwerbstätige nach NACE, Alter und Geschlecht",
+    "abruf_zeitpunkt": "2026-09-09T15:26:05",
+    "zeilen": 771,
+    "filter": {
+      "nace_r2": [
+        "C22",
+        "TOTAL"
+      ],
+      "age": [
+        "Y15-64"
+      ],
+      "sex": [
+        "T"
+      ]
+    },
+    "start_period": "2015",
+    "datei": "lfsa_egan22d_raw.xlsx"
   }
 }
