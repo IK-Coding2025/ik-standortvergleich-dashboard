@@ -350,6 +350,7 @@ def linien_chart(
     gruppierung: list,
     legende_unten: bool = False,
     hover_nachkommastellen: int = 2,
+    hover_text_func=None,
 ) -> go.Figure:
     """Liniendiagramm mit einer Linie je Gruppenkombination.
 
@@ -358,6 +359,8 @@ def linien_chart(
     ``hover_nachkommastellen`` steuert die Genauigkeit im Hover-Tooltip
     (Energiepreise benötigen 4 Stellen, da 2 Stellen z. B. 0,0552 als
     '0,06' anzeigen würden).
+    ``hover_text_func`` erlaubt eine benutzerdefinierte Formatierung des
+    Hover-Werts, z. B. `lambda v: f"{v/1e6:.1f} Mio."`.
     """
     fig = go.Figure()
     gruppiert = df.dropna(subset=[wert_spalte]).groupby(gruppierung, sort=True)
@@ -370,6 +373,18 @@ def linien_chart(
         name = schluessel[0] if not mehrere_gruppen else " · ".join(
             str(s) for s in schluessel
         )
+        if hover_text_func is not None:
+            hovertext = teil[wert_spalte].apply(hover_text_func)
+            hovertemplate = (
+                "%{x|%d.%m.%Y}<br>Wert: %{hovertext}<extra>%{fullData.name}</extra>"
+            )
+        else:
+            hovertext = None
+            hovertemplate = (
+                "%{x|%d.%m.%Y}<br>Wert: %{y:."
+                f"{hover_nachkommastellen}"
+                "f}<extra>%{fullData.name}</extra>"
+            )
         fig.add_trace(
             go.Scatter(
                 x=teil["time_date"],
@@ -377,11 +392,8 @@ def linien_chart(
                 mode="lines+markers",
                 name=name,
                 line=dict(color=farben.get(schluessel, IK_BLAU)),
-                hovertemplate=(
-                    "%{x|%d.%m.%Y}<br>Wert: %{y:."
-                    f"{hover_nachkommastellen}"
-                    "f}<extra>%{fullData.name}</extra>"
-                ),
+                hovertext=hovertext,
+                hovertemplate=hovertemplate,
             )
         )
     fig.update_yaxes(title_text=y_achsen_titel)
@@ -401,6 +413,8 @@ def dual_achsen_chart(
     prefix_rechts: str = "",
     hover_nachkommastellen: int = 2,
     legende_unten: bool = False,
+    hover_text_func_links=None,
+    hover_text_func_rechts=None,
 ) -> go.Figure:
     """Liniendiagramm mit zwei y-Achsen (links/rechts).
 
@@ -415,9 +429,9 @@ def dual_achsen_chart(
     farben = _farbe_mapping(
         [(df_links, wert_links), (df_rechts, wert_rechts)], gruppierung
     )
-    for wert, daten, gestrichelt, y_achse, prefix in (
-        (wert_links, df_links, False, "y1", prefix_links),
-        (wert_rechts, df_rechts, True, "y2", prefix_rechts),
+    for wert, daten, gestrichelt, y_achse, prefix, hover_func in (
+        (wert_links, df_links, False, "y1", prefix_links, hover_text_func_links),
+        (wert_rechts, df_rechts, True, "y2", prefix_rechts, hover_text_func_rechts),
     ):
         for schluessel, teil in daten.dropna(subset=[wert]).groupby(
             gruppierung, sort=True
@@ -427,6 +441,18 @@ def dual_achsen_chart(
             teil = teil.sort_values("time_date")
             name = prefix + " · ".join(str(s) for s in schluessel)
             farbe = farben.get(schluessel, IK_BLAU)
+            if hover_func is not None:
+                hovertext = teil[wert].apply(hover_func)
+                hovertemplate = (
+                    "%{x|%d.%m.%Y}<br>Wert: %{hovertext}<extra>%{fullData.name}</extra>"
+                )
+            else:
+                hovertext = None
+                hovertemplate = (
+                    "%{x|%d.%m.%Y}<br>Wert: %{y:."
+                    f"{hover_nachkommastellen}"
+                    "f}<extra>%{fullData.name}</extra>"
+                )
             fig.add_trace(
                 go.Scatter(
                     x=teil["time_date"],
@@ -437,11 +463,8 @@ def dual_achsen_chart(
                     line=dict(
                         color=farbe, dash="dash" if gestrichelt else "solid"
                     ),
-                    hovertemplate=(
-                        "%{x|%d.%m.%Y}<br>Wert: %{y:."
-                        f"{hover_nachkommastellen}"
-                        "f}<extra>%{fullData.name}</extra>"
-                    ),
+                    hovertext=hovertext,
+                    hovertemplate=hovertemplate,
                 )
             )
     fig.update_layout(
@@ -876,6 +899,100 @@ def lesebeispiel_verpackung(
     st.info(f"**Lesebeispiel:** {' '.join(teile)}")
 
 
+def lesebeispiel_bevoelkerung(
+    df_bev: pd.DataFrame,
+    df_proj_jan: pd.DataFrame,
+    proj_ende: int,
+) -> None:
+    """Lesebeispiel zu den Bevölkerungsgrafiken (Vergleich DE 2019 vs. aktuell)."""
+    bev_de = df_bev[df_bev["geo_label"] == "Deutschland"]
+    if bev_de.empty:
+        return
+
+    teile = []
+    wert_2019 = bev_de[bev_de["time"] == "2019"]["value"]
+    wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(bev_de, "value")
+    if not wert_2019.empty and wert_aktuell is not None:
+        w19 = wert_2019.iloc[-1]
+        diff = wert_aktuell - w19
+        teile.append(
+            f"Die Bevölkerung Deutschlands betrug im Jahr **2019** "
+            f"**{fmt_de(w19 / 1_000_000, 1)} Mio.** und im Jahr **{periode_aktuell}** "
+            f"**{fmt_de(wert_aktuell / 1_000_000, 1)} Mio.** "
+            f"(Veränderung: {fmt_de(diff / 1_000_000, 1)} Mio.)."
+        )
+
+    proj_de = df_proj_jan[df_proj_jan["geo_label"] == "Deutschland"]
+    if not proj_de.empty:
+        wert_horizont = proj_de[proj_de["time"] == str(proj_ende)]["value"]
+        wert_2025 = proj_de[proj_de["time"] == "2025"]["value"]
+        if not wert_horizont.empty and not wert_2025.empty:
+            teile.append(
+                f"Die Projektion geht für Deutschland von "
+                f"**{fmt_de(wert_2025.iloc[-1] / 1_000_000, 1)} Mio. im Jahr 2025** "
+                f"auf **{fmt_de(wert_horizont.iloc[-1] / 1_000_000, 1)} Mio. im Jahr "
+                f"{proj_ende}** aus."
+            )
+
+    if teile:
+        st.info(f"**Lesebeispiel Bevölkerung:** {' '.join(teile)}")
+
+
+def lesebeispiel_arbeitsmarkt(
+    df_lfsa: pd.DataFrame,
+    df_jvs: pd.DataFrame,
+) -> None:
+    """Lesebeispiel zu den Arbeitsmarktgrafiken (Vergleich DE 2019 vs. aktuell)."""
+    teile = []
+
+    lfsa_de = df_lfsa[df_lfsa["geo_label"] == "Deutschland"]
+    if not lfsa_de.empty:
+        wert_2019 = lfsa_de[lfsa_de["time"] == "2019"]["value"]
+        wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(lfsa_de, "value")
+        nace = (
+            lfsa_de.sort_values("time_date")["nace_r2_label"].iloc[-1]
+            if not lfsa_de.empty else ""
+        )
+        if not wert_2019.empty and wert_aktuell is not None:
+            w19 = wert_2019.iloc[-1]
+            diff = wert_aktuell - w19
+            teile.append(
+                f"Die Erwerbstätigenzahl (15-64 Jahre) in Deutschland für "
+                f"'{nace}' lag im Jahr **2019** bei **{fmt_de(w19, 1)} Tsd.** "
+                f"und im Jahr **{periode_aktuell}** bei **{fmt_de(wert_aktuell, 1)} Tsd.** "
+                f"(Veränderung: {fmt_de(diff, 1)} Tsd.)."
+            )
+
+    jvs_de = df_jvs[df_jvs["geo_label"] == "Deutschland"]
+    if not jvs_de.empty:
+        wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(jvs_de, "value")
+        if wert_aktuell is not None:
+            periode_2019 = "2019" + periode_aktuell[4:]
+            wert_2019 = jvs_de[jvs_de["time"] == periode_2019]["value"]
+            nace = (
+                jvs_de.sort_values("time_date")["nace_r2_1_label"].iloc[-1]
+                if not jvs_de.empty else ""
+            )
+            if not wert_2019.empty:
+                w19 = wert_2019.iloc[-1]
+                diff = wert_aktuell - w19
+                teile.append(
+                    f"Die Quote offener Stellen in Deutschland für '{nace}' "
+                    f"betrug im **{periode_aktuell}** **{fmt_de(wert_aktuell, 1)} %** "
+                    f"und im entsprechenden Quartal **{periode_2019}** "
+                    f"**{fmt_de(w19, 1)} %** (Veränderung: "
+                    f"{fmt_de(diff, 1)} Prozentpunkte)."
+                )
+            else:
+                teile.append(
+                    f"Die Quote offener Stellen in Deutschland für '{nace}' "
+                    f"betrug im **{periode_aktuell}** **{fmt_de(wert_aktuell, 1)} %**."
+                )
+
+    if teile:
+        st.info(f"**Lesebeispiel Arbeitsmarkt:** {' '.join(teile)}")
+
+
 def anzeige_tabelle(df: pd.DataFrame) -> pd.DataFrame:
     """Bereitet ein DataFrame für die Datenanzeige im Dashboard vor.
 
@@ -942,7 +1059,8 @@ def lade_alle_tabellen():
     finalen (gemergten) Dateien. Industrieproduktion & Erzeugerpreise
     werden direkt aus den Rohdaten der beiden STS-Datensätze gelesen
     (vollständige Länderabdeckung); die Merge-Datei bleibt separater
-    Pipeline-Output.
+    Pipeline-Output. Bevölkerung & Arbeitsmarkt werden aus den finalen
+    Tabellen geladen.
     """
     dateien = [
         config.FINAL_LC,
@@ -950,6 +1068,10 @@ def lade_alle_tabellen():
         config.DATASETS["sts_inpr_m"]["datei"],
         config.DATASETS["sts_inppd_m"]["datei"],
         config.FINAL_WASTE,
+        config.FINAL_BEV,
+        config.FINAL_PROJ,
+        config.FINAL_LFSA,
+        config.FINAL_JVS,
     ]
     fehlend = [d for d in dateien if not (config.OUTPUT_DIR / d).exists()]
     if fehlend:
@@ -971,7 +1093,10 @@ def lade_alle_tabellen():
 # Seitenaufbau
 # ---------------------------------------------------------------------------
 def main() -> None:
-    df_arbeit, df_energie, df_inpr, df_inppd, df_verpackung = lade_alle_tabellen()
+    (
+        df_arbeit, df_energie, df_inpr, df_inppd, df_verpackung,
+        df_bev, df_proj, df_lfsa, df_jvs,
+    ) = lade_alle_tabellen()
     # Rohdaten für Tab 3 vorbereiten: NACE-Code in die Bezeichnung
     # aufnehmen und Wert-Spalten herkunftsbezogen benennen (gleiche Namen
     # wie in der bisherigen Merge-Datei)
@@ -1025,6 +1150,10 @@ def main() -> None:
         | set(df_inpr["geo_label"].dropna())
         | set(df_inppd["geo_label"].dropna())
         | set(df_verpackung["geo_label"].dropna())
+        | set(df_bev["geo_label"].dropna())
+        | set(df_proj["geo_label"].dropna())
+        | set(df_lfsa["geo_label"].dropna())
+        | set(df_jvs["geo_label"].dropna())
     )
     # Standardauswahl: Deutschland + EU-27
     standard_geos = [
@@ -1041,10 +1170,13 @@ def main() -> None:
         st.warning("Bitte mindestens ein Land / eine Region auswählen.")
         st.stop()
 
+    # Der globale Zeitraumfilter bezieht sich auf die historischen Daten;
+    # die Bevölkerungsprojektion (bis 2100) wird im Tab selbst gesteuert.
     alle_jahre = pd.concat(
         [df_arbeit["time_date"], df_energie["time_date"],
          df_inpr["time_date"], df_inppd["time_date"],
-         df_verpackung["time_date"]]
+         df_verpackung["time_date"], df_bev["time_date"],
+         df_lfsa["time_date"], df_jvs["time_date"]]
     ).dt.year
     jahr_min = int(alle_jahre.min())
     jahr_max = int(alle_jahre.max())
@@ -1060,10 +1192,11 @@ def main() -> None:
     )
 
     # --- Tabs ----------------------------------------------------------------
-    tab_arbeit, tab_energie, tab_industrie, tab_verpackung = st.tabs(
+    tab_arbeit, tab_energie, tab_industrie, tab_bev, tab_verpackung = st.tabs(
         [
             "Arbeitskosten", "Energiepreise",
             "Industrieproduktion & Erzeugerpreise",
+            "Bevölkerung & Arbeitsmarkt",
             "Verpackungsabfälle & Recyclingquoten",
         ]
     )
@@ -1131,6 +1264,7 @@ def main() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
+            st.caption("Quelle: Eurostat – lc_lci_lev")
 
     # == Tab 2: Energiepreise =================================================
     with tab_energie:
@@ -1226,6 +1360,7 @@ def main() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
+            st.caption("Quelle: Eurostat – nrg_pc_205, nrg_pc_203")
 
     # == Tab 3: Industrieproduktion & Erzeugerpreise ==========================
     with tab_industrie:
@@ -1433,6 +1568,7 @@ def main() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
+            st.caption("Quelle: Eurostat – sts_inpr_m, sts_inppd_m")
 
     # == Tab 4: Verpackungsabfälle & Recyclingquoten ===========================
     with tab_verpackung:
@@ -1604,13 +1740,224 @@ def main() -> None:
                     use_container_width=True,
                     hide_index=True,
                 )
+            st.caption("Quelle: Eurostat – env_waspac")
+
+    # == Tab 5: Bevölkerung & Arbeitsmarkt ===================================
+    with tab_bev:
+        # Steuerungselemente der Bevölkerungsprojektion (oberhalb der Grafiken)
+        scenarien = optionen_label(df_proj, "projection_label")
+        auswahl_scenarien = st.multiselect(
+            "Projektionsszenario",
+            options=scenarien,
+            default=standard_label(scenarien, "Basisvorausberechnung"),
+        )
+        proj_ende = st.slider(
+            "Projektionshorizont (Jahr)",
+            min_value=2025,
+            max_value=2100,
+            value=2060,
+        )
+
+        jan_label = standard_label(
+            optionen_label(df_proj, "indic_de_label"),
+            "Bevölkerung am 1. Januar",
+        )[0]
+        pc_label = standard_label(
+            optionen_label(df_proj, "indic_de_label"),
+            "15-64",
+        )[0]
+        df_proj_f = df_proj[
+            df_proj["geo_label"].isin(auswahl_geos)
+            & df_proj["projection_label"].isin(auswahl_scenarien)
+            & (df_proj["time_date"].dt.year <= proj_ende)
+        ]
+        df_proj_jan = df_proj_f[df_proj_f["indic_de_label"] == jan_label]
+        df_proj_pc = df_proj_f[df_proj_f["indic_de_label"] == pc_label]
+
+        # --- Obere Reihe: Bevölkerung -----------------------------------------
+        oben_links, oben_rechts = st.columns(2)
+        with oben_links:
+            st.markdown(
+                "<h3>Bevölkerung (1. Januar)</h3>", unsafe_allow_html=True
+            )
+            df_bev_f = zeitraum_filter(
+                df_bev[df_bev["geo_label"].isin(auswahl_geos)], *von_bis
+            )
+            if df_bev_f.empty:
+                st.info("Keine Bevölkerungsdaten für die gewählte Auswahl.")
+            else:
+                st.plotly_chart(
+                    linien_chart(
+                        df_bev_f, "value",
+                        "Bevölkerung (1. Januar)",
+                        "Einwohner",
+                        ["geo_label"],
+                        legende_unten=True,
+                        hover_text_func=lambda v: f"{(v / 1_000_000):.1f} Mio.".replace(".", ","),
+                    ),
+                    use_container_width=True,
+                    config={"locale": "de"},
+                )
+        with oben_rechts:
+            if df_proj_jan.empty and df_proj_pc.empty:
+                st.info("Keine Prognosedaten für die gewählte Auswahl.")
+            else:
+                scenarien_text = " / ".join(str(s) for s in auswahl_scenarien)
+                tooltip_bs = (
+                    "Die Basisvorausberechnung basiert auf den beobachteten "
+                    "demografischen Daten des Jahres 2024. Der daraus "
+                    "abgeleitete Bevölkerungsstand zum 1. Januar 2025 dient "
+                    "als Ausgangspunkt für die Projektion bis 2100. Die "
+                    "weitere Entwicklung wird mithilfe länderspezifischer "
+                    "Annahmen zu Geburten, Sterblichkeit sowie Zu- und "
+                    "Fortzügen berechnet. Dabei werden bisherige "
+                    "demografische Trends fortgeschrieben und langfristig "
+                    "eine teilweise Annäherung der Entwicklungen zwischen den "
+                    "europäischen Ländern unterstellt. Die Ergebnisse sind "
+                    "Szenarien unter diesen Annahmen – keine verbindliche "
+                    "Bevölkerungsprognose."
+                )
+                st.markdown(
+                    f"<h3 title='{tooltip_bs}'>"
+                    f"Bevölkerungsprojektion ({scenarien_text}) ℹ</h3>",
+                    unsafe_allow_html=True,
+                )
+                fig_proj = dual_achsen_chart(
+                    df_proj_jan, "value",
+                    df_proj_pc, "value",
+                    "",
+                    "Bevölkerung (1. Januar)",
+                    "Anteil 15-64 Jahre (%)",
+                    ["geo_label"],
+                    prefix_links="",
+                    prefix_rechts="Anteil 15-64: ",
+                    hover_text_func_links=lambda v: f"{(v / 1_000_000):.1f} Mio.".replace(".", ","),
+                    hover_text_func_rechts=lambda v: f"{v:.1f} %".replace(".", ","),
+                    legende_unten=True,
+                )
+                st.plotly_chart(
+                    fig_proj,
+                    use_container_width=True,
+                    config={"locale": "de"},
+                )
+
+        lesebeispiel_bevoelkerung(df_bev_f, df_proj_jan, proj_ende)
+
+        # --- Untere Reihe: Arbeitsmarkt ---------------------------------------
+        unten_links, unten_rechts = st.columns(2)
+        with unten_links:
+            st.markdown(
+                "<h3>Erwerbstätige (15-64 Jahre)</h3>", unsafe_allow_html=True
+            )
+            nace_optionen = optionen_label(df_lfsa, "nace_r2_label")
+            auswahl_nace_bev = st.multiselect(
+                "NACE-Abschnitt",
+                options=nace_optionen,
+                default=standard_label(nace_optionen, "C22"),
+            )
+            df_lfsa_f = zeitraum_filter(
+                df_lfsa[
+                    df_lfsa["geo_label"].isin(auswahl_geos)
+                    & df_lfsa["nace_r2_label"].isin(auswahl_nace_bev)
+                ], *von_bis
+            )
+            if df_lfsa_f.empty:
+                st.info("Keine Beschäftigungsdaten für die gewählte Auswahl.")
+            else:
+                st.plotly_chart(
+                    linien_chart(
+                        df_lfsa_f, "value",
+                        "Erwerbstätige (15-64 Jahre)",
+                        "Tausend Personen",
+                        ["geo_label", "nace_r2_label"],
+                        legende_unten=True,
+                        hover_text_func=lambda v: f"{v:.1f} Tsd.".replace(".", ","),
+                    ),
+                    use_container_width=True,
+                    config={"locale": "de"},
+                )
+        with unten_rechts:
+            st.markdown(
+                "<h3>Quote der offenen Stellen</h3>", unsafe_allow_html=True
+            )
+            nace_bev_optionen = optionen_label(df_jvs, "nace_r2_1_label")
+            auswahl_nace_jvs = st.multiselect(
+                "Wirtschaftszweig",
+                options=nace_bev_optionen,
+                default=standard_label(nace_bev_optionen, "C –"),
+            )
+            df_jvs_f = zeitraum_filter(
+                df_jvs[
+                    df_jvs["geo_label"].isin(auswahl_geos)
+                    & df_jvs["nace_r2_1_label"].isin(auswahl_nace_jvs)
+                ], *von_bis
+            )
+            if df_jvs_f.empty:
+                st.info("Keine Daten zu offenen Stellen für die gewählte Auswahl.")
+            else:
+                fig_jvs = linien_chart(
+                    df_jvs_f, "value",
+                    "Quote der offenen Stellen",
+                    "%",
+                    ["geo_label", "nace_r2_1_label"],
+                    legende_unten=True,
+                )
+                # X-Achse mit Quartalsbeschriftungen statt Monaten
+                ticks = (
+                    df_jvs_f[["time_date", "time"]]
+                    .drop_duplicates()
+                    .sort_values("time_date")
+                )
+                fig_jvs.update_xaxes(
+                    tickmode="array",
+                    tickvals=ticks["time_date"],
+                    ticktext=ticks["time"],
+                    tickangle=45,
+                )
+                st.plotly_chart(
+                    fig_jvs,
+                    use_container_width=True,
+                    config={"locale": "de"},
+                )
+            st.caption(
+                "Die Quote der offenen Stellen zeigt, wie viel Prozent aller "
+                "Arbeitsplätze in einer Wirtschaft unbesetzt sind. Die Daten "
+                "basieren primär auf repräsentativen Unternehmensbefragungen der "
+                "nationalen statistischen Ämter (in Deutschland z. B. der "
+                "IAB-Stellenerhebung)."
+            )
+
+        lesebeispiel_arbeitsmarkt(df_lfsa_f, df_jvs_f)
+
+        with st.expander("Daten anzeigen"):
+            st.dataframe(
+                anzeige_tabelle(df_bev_f),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.dataframe(
+                anzeige_tabelle(df_proj_f),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.dataframe(
+                anzeige_tabelle(df_lfsa_f),
+                use_container_width=True,
+                hide_index=True,
+            )
+            st.dataframe(
+                anzeige_tabelle(df_jvs_f),
+                use_container_width=True,
+                hide_index=True,
+            )
+        st.caption(
+            "Quelle: Eurostat – demo_r_gind3, demo_gind, proj_25ndbi, "
+            "lfsa_egan22d, jvs_q_r21"
+        )
 
     # --- Footer --------------------------------------------------------------
     st.divider()
-    st.caption(
-        "Quelle: Eurostat – Datensätze lc_lci_lev, nrg_pc_205, nrg_pc_203, "
-        "sts_inpr_m, sts_inppd_m, env_waspac"
-    )
+    st.caption("Quellenangaben finden sich in den jeweiligen Registerkarten.")
     st.markdown(
         "**Kontakt bei Fragen:**  \n"
         "**Referat für Wirtschaft**  \n"

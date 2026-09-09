@@ -55,6 +55,17 @@ MAX_RETRIES = 3             # Max. Versuche bei API-Timeout/-Fehler
 RETRY_BACKOFF_SECONDS = 2   # Basis für exponentielles Backoff
 REQUEST_TIMEOUT = 120       # Sekunden
 
+# EU-27 (EUROSTAT-Codes) und deutsche NUTS-1-Regionen für demo_r_gind3
+EU27_CODES = [
+    "BE", "BG", "CZ", "DK", "DE", "EE", "IE", "EL", "ES", "FR",
+    "HR", "IT", "CY", "LV", "LT", "LU", "HU", "MT", "NL", "AT",
+    "PL", "PT", "RO", "SI", "SK", "FI", "SE",
+]
+DE_NUTS1_CODES = [
+    "DE1", "DE2", "DE3", "DE4", "DE5", "DE6", "DE7", "DE8",
+    "DE9", "DEA", "DEB", "DEC", "DED", "DEE", "DEF", "DEG",
+]
+
 # ---------------------------------------------------------------------------
 # Datensatz-Definitionen
 # ---------------------------------------------------------------------------
@@ -146,6 +157,82 @@ DATASETS = {
         "start_period": "2013",
         "datei": "env_waspac_raw.xlsx",
     },
+    "demo_r_gind3": {
+        "beschreibung": "Bevölkerung - regionale Daten (1. Januar)",
+        "filter": {
+            "indic_de": ["JAN"],
+            "geo": EU27_CODES + DE_NUTS1_CODES,
+        },
+        "pflichtfilter": {
+            "indic_de": ["JAN"],
+            "geo": EU27_CODES + DE_NUTS1_CODES,
+        },
+        "start_period": "2000",
+        "datei": "demo_r_gind3_raw.xlsx",
+    },
+    "demo_gind": {
+        "beschreibung": "Bevölkerung - EU-27 Aggregat (1. Januar)",
+        "filter": {
+            "geo": ["EU27_2020"],
+            "indic_de": ["JAN"],
+        },
+        "pflichtfilter": {
+            "geo": ["EU27_2020"],
+            "indic_de": ["JAN"],
+        },
+        "start_period": "2000",
+        "datei": "demo_gind_raw.xlsx",
+    },
+    "proj_25ndbi": {
+        "beschreibung": "Bevölkerungsprojektionen 2025-2100",
+        "filter": {
+            "geo": EU27_CODES + ["EU27_2020"],
+            "indic_de": ["JAN", "PC_Y15_64"],
+            "projection": [
+                "BSL", "LFRT", "LMRT", "HMIGR", "LMIGR", "NMIGR", "DCONV",
+            ],
+        },
+        "pflichtfilter": {
+            "indic_de": ["JAN", "PC_Y15_64"],
+            "projection": [
+                "BSL", "LFRT", "LMRT", "HMIGR", "LMIGR", "NMIGR", "DCONV",
+            ],
+        },
+        "start_period": "2025",
+        "datei": "proj_25ndbi_raw.xlsx",
+    },
+    "lfsa_egan22d": {
+        "beschreibung": "Erwerbstätige nach NACE, Alter und Geschlecht",
+        "filter": {
+            "nace_r2": ["C22", "TOTAL"],
+            "age": ["Y15-64"],
+            "sex": ["T"],
+        },
+        "pflichtfilter": {
+            "nace_r2": ["C22", "TOTAL"],
+            "age": ["Y15-64"],
+            "sex": ["T"],
+        },
+        "start_period": "2015",
+        "datei": "lfsa_egan22d_raw.xlsx",
+    },
+    "jvs_q_r21": {
+        "beschreibung": "Quote der offenen Stellen (Job Vacancy Rate)",
+        "filter": {
+            "nace_r2_1": ["C", "A-T"],
+            "indic_em": ["JVR"],
+            "sizeclas": ["TOTAL"],
+            "s_adj": ["SA"],
+        },
+        "pflichtfilter": {
+            "nace_r2_1": ["C", "A-T"],
+            "indic_em": ["JVR"],
+            "sizeclas": ["TOTAL"],
+            "s_adj": ["SA"],
+        },
+        "start_period": "2016",
+        "datei": "jvs_q_r21_raw.xlsx",
+    },
 }
 
 # Dateinamen der finalen (gemergten) Tabellen
@@ -153,6 +240,10 @@ FINAL_LC = "lc_lci_lev_final.xlsx"
 FINAL_MERGE_INDUSTRIE = "merge_industrieproduktion_erzeugerpreise.xlsx"
 FINAL_MERGE_ENERGIE = "merge_energiepreise.xlsx"
 FINAL_WASTE = "env_waspac_final.xlsx"
+FINAL_BEV = "merge_bevoelkerung.xlsx"
+FINAL_PROJ = "proj_25ndbi_final.xlsx"
+FINAL_LFSA = "lfsa_egan22d_final.xlsx"
+FINAL_JVS = "jvs_q_r21_final.xlsx"
 
 # Schlüsselspalten der Merges (Dokumentation der Join-Logik in merge_data.py)
 MERGE_A_KEYS = ["freq", "time", "geo", "nace_r2", "s_adj", "unit"]

@@ -253,10 +253,12 @@ def export_excel(df: pd.DataFrame, pfad: Path, sheet_name: str = "Daten") -> Non
         blatt.freeze_panes = "A2"
         blatt.auto_filter.ref = blatt.dimensions
         for spalte_idx, spalte in enumerate(df.columns, start=1):
-            laenge = max(
-                len(str(spalte)),
-                *(len(str(v)) for v in df[spalte].head(500)),
-            )
+            werte = [
+                len(str(v))
+                for v in df[spalte].head(500)
+                if pd.notna(v)
+            ]
+            laenge = max([len(str(spalte))] + werte)
             blatt.column_dimensions[
                 blatt.cell(row=1, column=spalte_idx).column_letter
             ].width = min(laenge + 2, 50)
@@ -353,8 +355,33 @@ def fetch_env_waspac() -> pd.DataFrame:
     return fetch_dataset("env_waspac", config.DATASETS["env_waspac"])
 
 
+def fetch_demo_r_gind3() -> pd.DataFrame:
+    """Datensatz demo_r_gind3 – regionale Bevölkerung (1. Januar)."""
+    return fetch_dataset("demo_r_gind3", config.DATASETS["demo_r_gind3"])
+
+
+def fetch_demo_gind() -> pd.DataFrame:
+    """Datensatz demo_gind – nationale Bevölkerung (EU-27 Aggregat)."""
+    return fetch_dataset("demo_gind", config.DATASETS["demo_gind"])
+
+
+def fetch_proj_25ndbi() -> pd.DataFrame:
+    """Datensatz proj_25ndbi – Bevölkerungsprojektionen 2025-2100."""
+    return fetch_dataset("proj_25ndbi", config.DATASETS["proj_25ndbi"])
+
+
+def fetch_lfsa_egan22d() -> pd.DataFrame:
+    """Datensatz lfsa_egan22d – Erwerbstätige nach NACE."""
+    return fetch_dataset("lfsa_egan22d", config.DATASETS["lfsa_egan22d"])
+
+
+def fetch_jvs_q_r21() -> pd.DataFrame:
+    """Datensatz jvs_q_r21 – Quote der offenen Stellen."""
+    return fetch_dataset("jvs_q_r21", config.DATASETS["jvs_q_r21"])
+
+
 def main() -> None:
-    """Führt den Abruf aller sechs Datensätze nacheinander aus."""
+    """Führt den Abruf aller Datensätze nacheinander aus."""
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     abrufe = [
         fetch_lc_lci_lev,
@@ -363,6 +390,11 @@ def main() -> None:
         fetch_sts_inpr_m,
         fetch_sts_inppd_m,
         fetch_env_waspac,
+        fetch_demo_r_gind3,
+        fetch_demo_gind,
+        fetch_proj_25ndbi,
+        fetch_lfsa_egan22d,
+        fetch_jvs_q_r21,
     ]
     fehler = []
     for abruf in abrufe:

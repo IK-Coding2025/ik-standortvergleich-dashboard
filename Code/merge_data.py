@@ -254,6 +254,46 @@ def finalisiere_verpackungsabfaelle() -> pd.DataFrame:
     return df
 
 
+def merge_bevoelkerung() -> pd.DataFrame:
+    """Merge der Bevölkerungsdaten (regionale Länder + EU-27 Aggregat).
+
+    ``demo_r_gind3`` liefert die Länder- und deutschen NUTS-1-Werte,
+    ``demo_gind`` das EU-27-Aggregat. Da beide Datensätze identische
+    Dimensionen haben, wird ein einfaches Zusammenfügen (Union) plus
+    Bereinigung ausreichend.
+    """
+    regional = load_raw("demo_r_gind3")
+    eu = load_raw("demo_gind")
+    merged = pd.concat([regional, eu], ignore_index=True)
+    merged = merged.drop_duplicates().reset_index(drop=True)
+    logger.info(
+        "Bevölkerungs-Merge: %d + %d Zeilen -> %d Zeilen",
+        len(regional), len(eu), len(merged),
+    )
+    return merged
+
+
+def finalisiere_projektionen() -> pd.DataFrame:
+    """Finalisiert die Bevölkerungsprojektionen 2025-2100."""
+    df = bereinige_tabelle(load_raw("proj_25ndbi"))
+    logger.info("Bevölkerungsprojektionen finalisiert: %d Zeilen", len(df))
+    return df
+
+
+def finalisiere_beschaeftigung() -> pd.DataFrame:
+    """Finalisiert die Erwerbstätigen-Daten (lfsa_egan22d)."""
+    df = bereinige_tabelle(load_raw("lfsa_egan22d"))
+    logger.info("Erwerbstätige finalisiert: %d Zeilen", len(df))
+    return df
+
+
+def finalisiere_stellenquote() -> pd.DataFrame:
+    """Finalisiert die Daten zur Quote der offenen Stellen (jvs_q_r21)."""
+    df = bereinige_tabelle(load_raw("jvs_q_r21"))
+    logger.info("Stellenquote finalisiert: %d Zeilen", len(df))
+    return df
+
+
 def _schreibe_merge_metadata() -> None:
     """Ergänzt den Merge-Zeitpunkt in ``fetch_metadata.json``."""
     meta = {}
@@ -271,6 +311,10 @@ def _schreibe_merge_metadata() -> None:
             config.FINAL_MERGE_INDUSTRIE,
             config.FINAL_MERGE_ENERGIE,
             config.FINAL_WASTE,
+            config.FINAL_BEV,
+            config.FINAL_PROJ,
+            config.FINAL_LFSA,
+            config.FINAL_JVS,
         ],
     }
     config.FETCH_METADATA_FILE.write_text(
@@ -279,7 +323,7 @@ def _schreibe_merge_metadata() -> None:
 
 
 def main() -> None:
-    """Erzeugt alle vier finalen Excel-Tabellen im Output-Pfad."""
+    """Erzeugt alle finalen Excel-Tabellen im Output-Pfad."""
     merge_a = bereinige_tabelle(merge_industrie())
     export_excel(merge_a, config.OUTPUT_DIR / config.FINAL_MERGE_INDUSTRIE)
     merge_b = bereinige_tabelle(merge_energie())
@@ -288,8 +332,16 @@ def main() -> None:
     export_excel(arbeitskosten, config.OUTPUT_DIR / config.FINAL_LC)
     verpackung = finalisiere_verpackungsabfaelle()
     export_excel(verpackung, config.OUTPUT_DIR / config.FINAL_WASTE)
+    bevoelkerung = bereinige_tabelle(merge_bevoelkerung())
+    export_excel(bevoelkerung, config.OUTPUT_DIR / config.FINAL_BEV)
+    projektion = finalisiere_projektionen()
+    export_excel(projektion, config.OUTPUT_DIR / config.FINAL_PROJ)
+    lfsa = finalisiere_beschaeftigung()
+    export_excel(lfsa, config.OUTPUT_DIR / config.FINAL_LFSA)
+    jvs = finalisiere_stellenquote()
+    export_excel(jvs, config.OUTPUT_DIR / config.FINAL_JVS)
     _schreibe_merge_metadata()
-    logger.info("Merge abgeschlossen – 4 finale Tabellen im Output-Pfad.")
+    logger.info("Merge abgeschlossen – 8 finale Tabellen im Output-Pfad.")
 
 
 if __name__ == "__main__":
