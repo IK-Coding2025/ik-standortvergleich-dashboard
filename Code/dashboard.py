@@ -1075,7 +1075,8 @@ def main() -> None:
             )
             # Standard: Klassenebene (C2221/C2222, IK-spezifisch)
             klassen = [
-                n for n in nace_optionen if not n.startswith("C22 – ")
+                n for n in nace_optionen
+                if n.startswith(("C2221 – ", "C2222 – "))
             ]
             auswahl_nace = st.multiselect(
                 "NACE-Abschnitt",
@@ -1113,38 +1114,69 @@ def main() -> None:
             "liefern nur die Divisionsebene C22 – bei deren Auswahl wird "
             "der NACE-Abschnitt daher automatisch angeglichen."
         )
-        # Automatischer NACE-Abgleich: Kleine/mittlere Länder melden keine
-        # Klassenebene (C2221/C2222). Wird ein solches Land gewählt, muss
-        # die Vergleichskategorie für ALLE ausgewählten Länder identisch
-        # sein -> automatisch auf C22 (Divisionsebene) schalten.
-        klassen_geos = set(
-            df_inpr.loc[
-                df_inpr["nace_r2"].isin(["C2221", "C2222"]), "geo_label"
-            ]
-        ) | set(
-            df_inppd.loc[
-                df_inppd["nace_r2"].isin(["C2221", "C2222"]), "geo_label"
-            ]
-        )
-        nur_c22_geos = [g for g in auswahl_geos if g not in klassen_geos]
-        if nur_c22_geos:
-            auswahl_nace_effektiv = [
-                n for n in nace_optionen if n.startswith("C22 – ")
-            ]
-            st.warning(
+        # Automatischer NACE-Abgleich: Die Vergleichskategorie muss für
+        # ALLE ausgewählten Länder identisch sein. Kleine/mittlere Länder
+        # melden keine 3-/4-stelligen Ebenen (EBS-Verordnung). Abschnitte,
+        # die nicht für alle ausgewählten Länder vorliegen, werden daher
+        # automatisch entfernt; bleibt nichts übrig, wird auf C22
+        # (einheitlich gemeldete Divisionsebene) umgestellt.
+        nace_verfuegbar = {}
+        for rahmen in (df_inpr, df_inppd):
+            for geo, teil in rahmen.groupby("geo_label"):
+                nace_verfuegbar.setdefault(geo, set()).update(
+                    teil["nace_r2"].dropna().unique()
+                )
+        gemeinsam = None
+        for geo in auswahl_geos:
+            codes = nace_verfuegbar.get(geo, set())
+            gemeinsam = codes if gemeinsam is None else gemeinsam & codes
+        gemeinsam = gemeinsam or set()
+
+        def _nace_code(label: str) -> str:
+            return str(label).split(" – ")[0]
+
+        auswahl_nace_effektiv = [
+            n for n in auswahl_nace if _nace_code(n) in gemeinsam
+        ]
+        entfernt = [n for n in auswahl_nace
+                    if n not in auswahl_nace_effektiv]
+        if entfernt or not auswahl_nace_effektiv:
+            auto_c22 = False
+            if not auswahl_nace_effektiv and "C22" in gemeinsam:
+                auswahl_nace_effektiv = [
+                    n for n in nace_optionen if _nace_code(n) == "C22"
+                ]
+                auto_c22 = True
+            verantwortliche = sorted({
+                g
+                for g in auswahl_geos
+                for n in (entfernt or auswahl_nace)
+                if _nace_code(n) not in nace_verfuegbar.get(g, set())
+            })
+            hinweis = (
                 "**Hinweis zum Ländervergleich:** "
-                + ", ".join(f"**{g}**" for g in nur_c22_geos)
-                + " meldet/melden an Eurostat Kurzzeitstatistiken nur auf "
-                "der Ebene **C22** (Herstellung von Gummi- und "
-                "Kunststoffwaren). Ein Vergleich auf Klassenebene "
-                "(C2221/C2222, z. B. Kunststoffverpackungen) ist für diese "
-                "Länder nicht möglich (EBS-Verordnung: 3-/4-stellige NACE "
-                "nur für die größten Mitgliedstaaten). Damit die "
-                "Vergleichskategorie identisch bleibt, wurde der "
-                "NACE-Abschnitt automatisch auf **C22** gesetzt."
+                + ", ".join(f"**{g}**" for g in verantwortliche)
+                + " meldet/melden nicht alle ausgewählten NACE-Abschnitte "
+                "an Eurostat (EBS-Verordnung: 3-/4-stellige NACE-Ebenen "
+                "nur von den größten Mitgliedstaaten). "
             )
-        else:
-            auswahl_nace_effektiv = auswahl_nace
+            if entfernt:
+                hinweis += (
+                    "Entfernt aus der Auswahl: "
+                    + ", ".join(f"„{n}“" for n in entfernt) + ". "
+                )
+            if auto_c22:
+                hinweis += (
+                    "Damit die Vergleichskategorie identisch bleibt, wurde "
+                    "automatisch auf **C22** (Herstellung von Gummi- und "
+                    "Kunststoffwaren) umgestellt."
+                )
+            else:
+                hinweis += (
+                    "Damit bleibt die Vergleichskategorie für alle "
+                    "ausgewählten Länder identisch."
+                )
+            st.warning(hinweis)
         # Die Bereinigungsauswahl gilt nur für den Produktionsindex;
         # Erzeugerpreise liegen ohnehin nur unbereinigt (NSA) vor.
         df_prod = prod_basis[
@@ -1188,8 +1220,7 @@ def main() -> None:
                     st.plotly_chart(
                         linien_chart(
                             df_prod, "value_inpr",
-                            "Industrieproduktionsindex "
-                            f"({unit_kurz}) – NACE C2221/C2222",
+                            f"Industrieproduktionsindex ({unit_kurz})",
                             unit_kurz,
                             ["geo_label", "nace_r2_label"],
                             legende_unten=True,
@@ -1206,7 +1237,7 @@ def main() -> None:
                 st.plotly_chart(
                     linien_chart(
                         df_preis, "value_inppd",
-                        f"Erzeugerpreisindex ({unit_kurz}) – NACE C2221/C2222",
+                        f"Erzeugerpreisindex ({unit_kurz})",
                         unit_kurz,
                         ["geo_label", "nace_r2_label"],
                         legende_unten=True,

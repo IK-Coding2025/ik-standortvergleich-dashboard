@@ -89,11 +89,17 @@ DATASETS = {
     "sts_inpr_m": {
         "beschreibung": "Industrieproduktionsindex (monatlich)",
         "filter": {
-            "nace_r2": ["C2221", "C2222", "C22"],  # Kunststofferzeugnisse + Gummi/Kunststoff (C22 für volle Länderabdeckung)
+            "nace_r2": ["C2221", "C2222", "C22", "C2223", "C2229",
+                        "C2896", "C2016", "C1721", "C10_C11"],
+            # Kunststofferzeugnisse (Details), Gummi/Kunststoff Division C22
+            # (volle Länderabdeckung), Kunststoffmaschinen C2896,
+            # Kunststoffe in Primärformen C2016, Papierverpackungen C1721,
+            # Nahrungs-/Futtermittel + Getränke C10_C11
             "unit": ["I21", "PCH_PRE"],
         },
         "pflichtfilter": {
-            "nace_r2": ["C2221", "C2222", "C22"],
+            "nace_r2": ["C2221", "C2222", "C22", "C2223", "C2229",
+                        "C2896", "C2016", "C1721", "C10_C11"],
             "unit": ["I21", "PCH_PRE"],
         },
         "datei": "sts_inpr_m_raw.xlsx",
@@ -101,11 +107,13 @@ DATASETS = {
     "sts_inppd_m": {
         "beschreibung": "Erzeugerpreisindex Industrie, Inlandsmarkt (monatlich)",
         "filter": {
-            "nace_r2": ["C2221", "C2222", "C22"],
+            "nace_r2": ["C2221", "C2222", "C22", "C2223", "C2229",
+                        "C2896", "C2016", "C1721", "C10_C11"],
             "unit": ["I21", "PCH_PRE"],
         },
         "pflichtfilter": {
-            "nace_r2": ["C2221", "C2222", "C22"],
+            "nace_r2": ["C2221", "C2222", "C22", "C2223", "C2229",
+                        "C2896", "C2016", "C1721", "C10_C11"],
             "unit": ["I21", "PCH_PRE"],
         },
         "datei": "sts_inppd_m_raw.xlsx",
