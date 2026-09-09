@@ -1,10 +1,10 @@
 """IK Standortvergleich Deutschland – Europa (Streamlit-Dashboard).
 
-Liest die finalen Excel-Tabellen (Arbeitskosten, Energiepreise) sowie die
-STS-Rohdaten (Industrieproduktion, Erzeugerpreise) aus dem Output-Pfad und
-visualisiert sie in drei Tabs. Layout orientiert an
-https://ikdashboard.streamlit.app/ (Kopfzeile mit Logo, Seitenleiste für
-Filter, KPI-Kacheln, Charts, Footer).
+Liest die finalen Excel-Tabellen (Arbeitskosten, Energiepreise,
+Verpackungsabfälle) sowie die STS-Rohdaten (Industrieproduktion,
+Erzeugerpreise) aus dem Output-Pfad und visualisiert sie in vier Tabs.
+Layout orientiert an https://ikdashboard.streamlit.app/ (Kopfzeile mit Logo,
+Seitenleiste für Filter, KPI-Kacheln, Charts, Footer).
 
 Starten:
     streamlit run dashboard.py
@@ -711,6 +711,94 @@ def lesebeispiel_industrie(
     st.info(f"**Lesebeispiel:** {satz}")
 
 
+def _einheit_text(unit_label: str) -> str:
+    """Gibt eine kurze Einheit für Chart- und Lesebeispiel-Text zurück."""
+    if "Kilogramm" in str(unit_label):
+        return "kg pro Kopf"
+    if "Tonne" in str(unit_label):
+        return "Tonnen"
+    if "Prozent" in str(unit_label):
+        return "%"
+    return str(unit_label)
+
+
+def lesebeispiel_verpackung(
+    df_links: pd.DataFrame,
+    df_rechts: pd.DataFrame,
+    unit_label: str,
+    abfall_label: str,
+    recycling_label: str,
+) -> None:
+    """Schreibt ein dynamisches Lesebeispiel für den Verpackungs-Tab.
+
+    Vergleicht Deutschland mit dem EU-27-Durchschnitt für die gewählte
+    Abfallkategorie und die beiden ausgewählten Maßnahmen.
+    """
+    geos = list(
+        dict.fromkeys(
+            pd.concat([df_links["geo_label"], df_rechts["geo_label"]]).dropna()
+        )
+    )
+    referenz, eu = _referenz_und_eu(geos)
+    if referenz is None:
+        return
+
+    einheit = _einheit_text(unit_label)
+    teile = []
+
+    wert_ref, _, periode_ref, _ = letzter_wert_mit_vorjahr(
+        df_links[df_links["geo_label"] == referenz], "value"
+    )
+    if wert_ref is not None:
+        satz = (
+            f"Im Jahr {periode_ref} betrug das Abfallaufkommen "
+            f"({abfall_label}) für {referenz} "
+            f"**{fmt_de(wert_ref, 1)} {einheit}**"
+        )
+        if eu and eu != referenz:
+            wert_eu, _, periode_eu, _ = letzter_wert_mit_vorjahr(
+                df_links[df_links["geo_label"] == eu], "value"
+            )
+            if wert_eu is not None:
+                abstand = wert_ref - wert_eu
+                satz += (
+                    f"; der EU-27-Durchschnitt lag bei "
+                    f"{fmt_de(wert_eu, 1)} {einheit} – {referenz} liegt "
+                    f"damit {fmt_de(abs(abstand), 1)} {einheit} "
+                    f"{'über' if abstand >= 0 else 'unter'} dem EU-Durchschnitt"
+                )
+        teile.append(satz + ".")
+
+    wert_r, _, periode_r, _ = letzter_wert_mit_vorjahr(
+        df_rechts[df_rechts["geo_label"] == referenz], "value"
+    )
+    if wert_r is not None:
+        satz_r = (
+            f"Für das Recycling ({recycling_label}) betrug der Wert "
+            f"in {referenz} im Jahr {periode_r} **{fmt_de(wert_r, 1)} {einheit}**"
+        )
+        if eu and eu != referenz:
+            wert_r_eu, _, _, _ = letzter_wert_mit_vorjahr(
+                df_rechts[df_rechts["geo_label"] == eu], "value"
+            )
+            if wert_r_eu is not None:
+                abstand = wert_r - wert_r_eu
+                satz_r += (
+                    f" (EU-27: {fmt_de(wert_r_eu, 1)} {einheit} – "
+                    f"{referenz} liegt {fmt_de(abs(abstand), 1)} {einheit} "
+                    f"{'über' if abstand >= 0 else 'unter'} dem Durchschnitt)"
+                )
+        teile.append(satz_r + ".")
+
+    if einheit == "%":
+        teile.append(
+            "Die Werte in Prozent geben das Verhältnis der jeweiligen "
+            "Menge (z. B. Recycling) zur gesamten erzeugten Verpackungsabfall-"
+            "menge an."
+        )
+    st.info(f"**Lesebeispiel:** {' '.join(teile)}")
+
+
 def anzeige_tabelle(df: pd.DataFrame) -> pd.DataFrame:
     """Bereitet ein DataFrame für die Datenanzeige im Dashboard vor.
 
@@ -773,16 +861,18 @@ def ohne_code_spalten(df: pd.DataFrame) -> pd.DataFrame:
 def lade_alle_tabellen():
     """Lädt die benötigten Tabellen oder bricht mit Fehlermeldung ab.
 
-    Arbeitskosten und Energiepreise kommen aus den finalen (gemergten)
-    Dateien. Industrieproduktion & Erzeugerpreise werden direkt aus den
-    Rohdaten der beiden STS-Datensätze gelesen (vollständige Länder-
-    abdeckung); die Merge-Datei bleibt separater Pipeline-Output.
+    Arbeitskosten, Energiepreise und Verpackungsabfälle kommen aus den
+    finalen (gemergten) Dateien. Industrieproduktion & Erzeugerpreise
+    werden direkt aus den Rohdaten der beiden STS-Datensätze gelesen
+    (vollständige Länderabdeckung); die Merge-Datei bleibt separater
+    Pipeline-Output.
     """
     dateien = [
         config.FINAL_LC,
         config.FINAL_MERGE_ENERGIE,
         config.DATASETS["sts_inpr_m"]["datei"],
         config.DATASETS["sts_inppd_m"]["datei"],
+        config.FINAL_WASTE,
     ]
     fehlend = [d for d in dateien if not (config.OUTPUT_DIR / d).exists()]
     if fehlend:
@@ -804,7 +894,7 @@ def lade_alle_tabellen():
 # Seitenaufbau
 # ---------------------------------------------------------------------------
 def main() -> None:
-    df_arbeit, df_energie, df_inpr, df_inppd = lade_alle_tabellen()
+    df_arbeit, df_energie, df_inpr, df_inppd, df_verpackung = lade_alle_tabellen()
     # Rohdaten für Tab 3 vorbereiten: NACE-Code in die Bezeichnung
     # aufnehmen und Wert-Spalten herkunftsbezogen benennen (gleiche Namen
     # wie in der bisherigen Merge-Datei)
@@ -857,6 +947,7 @@ def main() -> None:
         | set(df_energie["geo_label"].dropna())
         | set(df_inpr["geo_label"].dropna())
         | set(df_inppd["geo_label"].dropna())
+        | set(df_verpackung["geo_label"].dropna())
     )
     # Standardauswahl: Deutschland + EU-27
     standard_geos = [
@@ -875,9 +966,10 @@ def main() -> None:
 
     alle_jahre = pd.concat(
         [df_arbeit["time_date"], df_energie["time_date"],
-         df_inpr["time_date"], df_inppd["time_date"]]
+         df_inpr["time_date"], df_inppd["time_date"],
+         df_verpackung["time_date"]]
     ).dt.year
-    jahr_min = max(int(alle_jahre.min()), int(config.START_PERIOD))
+    jahr_min = int(alle_jahre.min())
     jahr_max = int(alle_jahre.max())
     von_bis = st.sidebar.slider(
         "Zeitraum (Jahre)",
@@ -891,9 +983,12 @@ def main() -> None:
     )
 
     # --- Tabs ----------------------------------------------------------------
-    tab_arbeit, tab_energie, tab_industrie = st.tabs(
-        ["Arbeitskosten", "Energiepreise",
-         "Industrieproduktion & Erzeugerpreise"]
+    tab_arbeit, tab_energie, tab_industrie, tab_verpackung = st.tabs(
+        [
+            "Arbeitskosten", "Energiepreise",
+            "Industrieproduktion & Erzeugerpreise",
+            "Verpackungsabfälle & Recyclingquoten",
+        ]
     )
 
     # == Tab 1: Arbeitskosten =================================================
@@ -1262,11 +1357,136 @@ def main() -> None:
                     hide_index=True,
                 )
 
+    # == Tab 4: Verpackungsabfälle & Recyclingquoten ===========================
+    with tab_verpackung:
+        df = zeitraum_filter(
+            df_verpackung[df_verpackung["geo_label"].isin(auswahl_geos)],
+            *von_bis,
+        )
+        f1, f2 = st.columns(2)
+        with f1:
+            waste_optionen = optionen_label(df_verpackung, "waste_label")
+            auswahl_waste = st.multiselect(
+                "Verpackungskategorie",
+                options=waste_optionen,
+                default=standard_label(
+                    waste_optionen, "W150102 –", "Kunststoffverpackungen"
+                ),
+            )
+        with f2:
+            unit_optionen = optionen_label(df_verpackung, "unit_label")
+            auswahl_unit_verp = st.multiselect(
+                "Maßeinheit",
+                options=unit_optionen,
+                default=standard_label(
+                    unit_optionen, "Kilogramm pro Kopf", "KG_HAB"
+                ),
+            )
+        oper_optionen = optionen_label(df_verpackung, "wst_oper_label")
+        f3, f4 = st.columns(2)
+        with f3:
+            auswahl_oper_links = st.multiselect(
+                "Abfallaufkommen (linke Grafik)",
+                options=oper_optionen,
+                default=standard_label(
+                    oper_optionen, "GEN –", "Erzeugter Abfall"
+                ),
+            )
+        with f4:
+            auswahl_oper_rechts = st.multiselect(
+                "Recycling / Verwertung (rechte Grafik)",
+                options=oper_optionen,
+                default=standard_label(
+                    oper_optionen, "RCY –", "Recycling"
+                ),
+            )
+
+        st.caption(
+            "Hinweise: **KG_HAB** = Kilogramm pro Kopf, **T** = Tonnen, "
+            "**PC** = Prozent. Bei PC wird die Menge der jeweiligen "
+            "Maßnahme ins Verhältnis zur gesamten erzeugten "
+            "Verpackungsabfallmenge gesetzt."
+        )
+        st.info(
+            "Zielvorgaben Verpackungsverordnung (Stand 31.12.2025): "
+            "Gesamtverpackungsaufkommen mindestens **65 %**; "
+            "Papier, Pappe, Karton **75 %**; Glas **70 %**; "
+            "Eisenmetalle **70 %**; Aluminium **50 %**; "
+            "Kunststoffe **50 %**; Holz **25 %**."
+        )
+
+        df = df[
+            df["waste_label"].isin(auswahl_waste)
+            & df["unit_label"].isin(auswahl_unit_verp)
+        ]
+        df_links = df[df["wst_oper_label"].isin(auswahl_oper_links)]
+        df_rechts = df[df["wst_oper_label"].isin(auswahl_oper_rechts)]
+
+        if df_links.empty and df_rechts.empty:
+            st.info("Keine Daten für die gewählte Filterkombination.")
+        else:
+            unit_text = (
+                _einheit_text(auswahl_unit_verp[0]) if len(auswahl_unit_verp) == 1
+                else "ausgewählte Einheiten"
+            )
+            abfall_text = (
+                auswahl_oper_links[0] if len(auswahl_oper_links) == 1
+                else "ausgewählte Maßnahmen"
+            )
+            recycling_text = (
+                auswahl_oper_rechts[0] if len(auswahl_oper_rechts) == 1
+                else "ausgewählte Maßnahmen"
+            )
+            spalte_links, spalte_rechts = st.columns(2)
+            with spalte_links:
+                st.subheader("Abfallaufkommen")
+                if df_links.empty:
+                    st.info("Keine Daten für die linke Grafik.")
+                else:
+                    st.plotly_chart(
+                        linien_chart(
+                            df_links, "value",
+                            f"Verpackungsabfall ({unit_text})",
+                            unit_text,
+                            ["geo_label", "wst_oper_label"],
+                            legende_unten=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+            with spalte_rechts:
+                st.subheader("Recycling / Verwertung")
+                if df_rechts.empty:
+                    st.info("Keine Daten für die rechte Grafik.")
+                else:
+                    st.plotly_chart(
+                        linien_chart(
+                            df_rechts, "value",
+                            f"Recycling / Verwertung ({unit_text})",
+                            unit_text,
+                            ["geo_label", "wst_oper_label"],
+                            legende_unten=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+            lesebeispiel_verpackung(
+                df_links, df_rechts,
+                auswahl_unit_verp[0] if auswahl_unit_verp else "",
+                abfall_text, recycling_text,
+            )
+            with st.expander("Daten anzeigen"):
+                st.dataframe(
+                    anzeige_tabelle(pd.concat([df_links, df_rechts])),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+
     # --- Footer --------------------------------------------------------------
     st.divider()
     st.caption(
         "Quelle: Eurostat – Datensätze lc_lci_lev, nrg_pc_205, nrg_pc_203, "
-        "sts_inpr_m, sts_inppd_m"
+        "sts_inpr_m, sts_inppd_m, env_waspac"
     )
     st.markdown(
         "**Kontakt bei Fragen:**  \n"

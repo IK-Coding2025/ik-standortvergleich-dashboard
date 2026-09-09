@@ -80,11 +80,46 @@
     "datei": "sts_inppd_m_raw.xlsx"
   },
   "_merge": {
-    "merge_zeitpunkt": "2026-09-08T10:02:04",
+    "merge_zeitpunkt": "2026-09-09T11:31:15",
     "dateien": [
       "lc_lci_lev_final.xlsx",
       "merge_industrieproduktion_erzeugerpreise.xlsx",
-      "merge_energiepreise.xlsx"
+      "merge_energiepreise.xlsx",
+      "env_waspac_final.xlsx"
     ]
+  },
+  "env_waspac": {
+    "beschreibung": "Verpackungsabfälle und Recyclingquoten",
+    "abruf_zeitpunkt": "2026-09-09T11:30:23",
+    "zeilen": 44339,
+    "filter": {
+      "waste": [
+        "W1501",
+        "W150101",
+        "W150102",
+        "W150103",
+        "W150104",
+        "W15010401",
+        "W15010402",
+        "W150107",
+        "W150199"
+      ],
+      "wst_oper": [
+        "GEN",
+        "RCV_OTH",
+        "RCV_E_PAC",
+        "RCY",
+        "RCY_NAT",
+        "RCY_EU_FOR",
+        "RCY_NEU"
+      ],
+      "unit": [
+        "KG_HAB",
+        "T",
+        "PC"
+      ]
+    },
+    "start_period": "2013",
+    "datei": "env_waspac_raw.xlsx"
   }
 }

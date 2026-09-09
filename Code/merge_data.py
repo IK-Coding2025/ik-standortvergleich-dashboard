@@ -1,6 +1,6 @@
 """Zusammenführung (Merge) der Eurostat-Rohdaten.
 
-Erzeugt aus den Rohdaten-Exporten drei finale Excel-Tabellen im Output-Pfad:
+Erzeugt aus den Rohdaten-Exporten vier finale Excel-Tabellen im Output-Pfad:
 
 1. ``merge_industrieproduktion_erzeugerpreise.xlsx``
    Merge A: sts_inpr_m + sts_inppd_m
@@ -8,6 +8,8 @@ Erzeugt aus den Rohdaten-Exporten drei finale Excel-Tabellen im Output-Pfad:
    Merge B: nrg_pc_205 + nrg_pc_203
 3. ``lc_lci_lev_final.xlsx``
    Arbeitskosten (kein Merge-Partner vorgesehen, daher 1:1 finalisiert)
+4. ``env_waspac_final.xlsx``
+   Verpackungsabfälle & Recyclingquoten (kein Merge, daher 1:1 finalisiert)
 
 Alle finalen Tabellen werden zusätzlich bereinigt (siehe
 ``bereinige_tabelle``): nur Euro-Werte, und Code-Spalten, die durch eine
@@ -198,6 +200,22 @@ def bereinige_tabelle(df: pd.DataFrame) -> pd.DataFrame:
         df["nace_r2_label"] = kombiniert.where(
             df["nace_r2"].notna(), df["nace_r2_label"]
         )
+    if "waste" in df.columns and "waste_label" in df.columns:
+        df = df.copy()
+        kombiniert = (
+            df["waste"].astype(str) + " – " + df["waste_label"].astype(str)
+        )
+        df["waste_label"] = kombiniert.where(
+            df["waste"].notna(), df["waste_label"]
+        )
+    if "wst_oper" in df.columns and "wst_oper_label" in df.columns:
+        df = df.copy()
+        kombiniert = (
+            df["wst_oper"].astype(str) + " – " + df["wst_oper_label"].astype(str)
+        )
+        df["wst_oper_label"] = kombiniert.where(
+            df["wst_oper"].notna(), df["wst_oper_label"]
+        )
     zu_loeschen = [
         spalte
         for spalte in df.columns
@@ -225,6 +243,17 @@ def finalisiere_arbeitskosten() -> pd.DataFrame:
     return df
 
 
+def finalisiere_verpackungsabfaelle() -> pd.DataFrame:
+    """Finalisiert die vierte Tabelle: Verpackungsabfälle & Recyclingquoten.
+
+    Die Rohdaten sind bereits gefiltert; sie werden bereinigt und als
+    ``env_waspac_final.xlsx`` exportiert.
+    """
+    df = bereinige_tabelle(load_raw("env_waspac"))
+    logger.info("Verpackungsabfälle finalisiert: %d Zeilen", len(df))
+    return df
+
+
 def _schreibe_merge_metadata() -> None:
     """Ergänzt den Merge-Zeitpunkt in ``fetch_metadata.json``."""
     meta = {}
@@ -241,6 +270,7 @@ def _schreibe_merge_metadata() -> None:
             config.FINAL_LC,
             config.FINAL_MERGE_INDUSTRIE,
             config.FINAL_MERGE_ENERGIE,
+            config.FINAL_WASTE,
         ],
     }
     config.FETCH_METADATA_FILE.write_text(
@@ -249,15 +279,17 @@ def _schreibe_merge_metadata() -> None:
 
 
 def main() -> None:
-    """Erzeugt alle drei finalen Excel-Tabellen im Output-Pfad."""
+    """Erzeugt alle vier finalen Excel-Tabellen im Output-Pfad."""
     merge_a = bereinige_tabelle(merge_industrie())
     export_excel(merge_a, config.OUTPUT_DIR / config.FINAL_MERGE_INDUSTRIE)
     merge_b = bereinige_tabelle(merge_energie())
     export_excel(merge_b, config.OUTPUT_DIR / config.FINAL_MERGE_ENERGIE)
     arbeitskosten = finalisiere_arbeitskosten()
     export_excel(arbeitskosten, config.OUTPUT_DIR / config.FINAL_LC)
+    verpackung = finalisiere_verpackungsabfaelle()
+    export_excel(verpackung, config.OUTPUT_DIR / config.FINAL_WASTE)
     _schreibe_merge_metadata()
-    logger.info("Merge abgeschlossen – 3 finale Tabellen im Output-Pfad.")
+    logger.info("Merge abgeschlossen – 4 finale Tabellen im Output-Pfad.")
 
 
 if __name__ == "__main__":

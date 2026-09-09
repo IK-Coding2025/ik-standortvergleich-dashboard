@@ -33,13 +33,17 @@ logger = config.setup_logging()
 # ---------------------------------------------------------------------------
 # API-Abruf mit Retry-Logik
 # ---------------------------------------------------------------------------
-def fetch_jsonstat(dataset_code: str, filter_params: dict) -> dict:
+def fetch_jsonstat(
+    dataset_code: str, filter_params: dict, start_period: str = config.START_PERIOD
+) -> dict:
     """Ruft einen Eurostat-Datensatz als JSON-stat 2.0 ab.
 
     Args:
         dataset_code: Eurostat-Datensatzcode, z. B. ``"lc_lci_lev"``.
         filter_params: Mapping Dimensions-ID -> Liste erlaubter Codes,
             z. B. ``{"nace_r2": ["C"], "unit": ["EUR", "RT_PRE_EUR"]}``.
+        start_period: Frühester Zeitraum (z. B. ``"2013"`` für
+            Verpackungsabfälle).
 
     Returns:
         Das JSON-stat-2.0-Dokument als ``dict``.
@@ -55,7 +59,7 @@ def fetch_jsonstat(dataset_code: str, filter_params: dict) -> dict:
     params = [
         ("format", "JSON"),
         ("lang", config.LANG),
-        ("sinceTimePeriod", config.START_PERIOD),
+        ("sinceTimePeriod", start_period),
     ]
     for dim, values in filter_params.items():
         for value in values:
@@ -205,13 +209,16 @@ def parse_jsonstat(payload: dict) -> pd.DataFrame:
 # Validierung und Export
 # ---------------------------------------------------------------------------
 def validate_mandatory_filters(
-    df: pd.DataFrame, dataset_code: str, pflichtfilter: dict
+    df: pd.DataFrame,
+    dataset_code: str,
+    pflichtfilter: dict,
+    start_period: str = config.START_PERIOD,
 ) -> None:
     """Prüft vor dem Export, ob alle Pflichtfilter korrekt angewendet wurden.
 
     Raises:
         ValueError: Wenn eine gefilterte Dimension unerlaubte Codes enthält
-            oder Zeiträume vor ``config.START_PERIOD`` auftauchen.
+            oder Zeiträume vor dem vorgegebenen Startzeitraum auftauchen.
     """
     for dim, erlaubt in pflichtfilter.items():
         if dim not in df.columns:
@@ -227,10 +234,10 @@ def validate_mandatory_filters(
             )
     if "time" in df.columns and not df.empty:
         jahre = df["time"].astype(str).str[:4].astype(int)
-        if jahre.min() < int(config.START_PERIOD):
+        if jahre.min() < int(start_period):
             raise ValueError(
                 f"{dataset_code}: Zeitraum-Filter verletzt – frühestes Jahr "
-                f"{jahre.min()} < {config.START_PERIOD}"
+                f"{jahre.min()} < {start_period}"
             )
 
 
@@ -266,14 +273,17 @@ def fetch_dataset(dataset_code: str, spez: dict) -> pd.DataFrame:
     die Datenstand-Anzeige im Dashboard).
     """
     abruf_zeitpunkt = datetime.now()
+    start_period = spez.get("start_period", config.START_PERIOD)
     logger.info(
         "Starte Abruf: %s (%s) | Filter: %s | ab %s",
         dataset_code, spez["beschreibung"], spez["filter"] or "(alle Dimensionen)",
-        config.START_PERIOD,
+        start_period,
     )
-    payload = fetch_jsonstat(dataset_code, spez["filter"])
+    payload = fetch_jsonstat(dataset_code, spez["filter"], start_period)
     df = parse_jsonstat(payload)
-    validate_mandatory_filters(df, dataset_code, spez["pflichtfilter"])
+    validate_mandatory_filters(
+        df, dataset_code, spez["pflichtfilter"], start_period
+    )
 
     pfad = config.OUTPUT_DIR / spez["datei"]
     export_excel(df, pfad)
@@ -290,7 +300,7 @@ def fetch_dataset(dataset_code: str, spez: dict) -> pd.DataFrame:
             "abruf_zeitpunkt": abruf_zeitpunkt.isoformat(timespec="seconds"),
             "zeilen": int(len(df)),
             "filter": spez["filter"],
-            "start_period": config.START_PERIOD,
+            "start_period": start_period,
             "datei": spez["datei"],
         },
     )
@@ -338,8 +348,13 @@ def fetch_sts_inppd_m() -> pd.DataFrame:
     return fetch_dataset("sts_inppd_m", config.DATASETS["sts_inppd_m"])
 
 
+def fetch_env_waspac() -> pd.DataFrame:
+    """Datensatz env_waspac – Verpackungsabfälle und Recyclingquoten."""
+    return fetch_dataset("env_waspac", config.DATASETS["env_waspac"])
+
+
 def main() -> None:
-    """Führt den Abruf aller fünf Datensätze nacheinander aus."""
+    """Führt den Abruf aller sechs Datensätze nacheinander aus."""
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     abrufe = [
         fetch_lc_lci_lev,
@@ -347,6 +362,7 @@ def main() -> None:
         fetch_nrg_pc_203,
         fetch_sts_inpr_m,
         fetch_sts_inppd_m,
+        fetch_env_waspac,
     ]
     fehler = []
     for abruf in abrufe:

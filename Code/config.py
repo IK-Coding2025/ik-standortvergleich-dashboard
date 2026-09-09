@@ -5,8 +5,9 @@ Pfade und Parameter ausschließlich von hier, damit Anpassungen nur an
 einer Stelle nötig sind.
 
 Ausführungsreihenfolge der Pipeline:
-    1. python fetch_data.py      -> 5 Rohdaten-Excel-Dateien
+    1. python fetch_data.py      -> 6 Rohdaten-Excel-Dateien
     2. python merge_data.py      -> 2 Merge-Dateien + lc_lci_lev_final.xlsx
+                                  + env_waspac_final.xlsx
     3. streamlit run dashboard.py
 """
 
@@ -118,12 +119,40 @@ DATASETS = {
         },
         "datei": "sts_inppd_m_raw.xlsx",
     },
+    "env_waspac": {
+        "beschreibung": "Verpackungsabfälle und Recyclingquoten",
+        "filter": {
+            "waste": [
+                "W1501", "W150101", "W150102", "W150103", "W150104",
+                "W15010401", "W15010402", "W150107", "W150199",
+            ],
+            "wst_oper": [
+                "GEN", "RCV_OTH", "RCV_E_PAC", "RCY", "RCY_NAT",
+                "RCY_EU_FOR", "RCY_NEU",
+            ],
+            "unit": ["KG_HAB", "T", "PC"],
+        },
+        "pflichtfilter": {
+            "waste": [
+                "W1501", "W150101", "W150102", "W150103", "W150104",
+                "W15010401", "W15010402", "W150107", "W150199",
+            ],
+            "wst_oper": [
+                "GEN", "RCV_OTH", "RCV_E_PAC", "RCY", "RCY_NAT",
+                "RCY_EU_FOR", "RCY_NEU",
+            ],
+            "unit": ["KG_HAB", "T", "PC"],
+        },
+        "start_period": "2013",
+        "datei": "env_waspac_raw.xlsx",
+    },
 }
 
 # Dateinamen der finalen (gemergten) Tabellen
 FINAL_LC = "lc_lci_lev_final.xlsx"
 FINAL_MERGE_INDUSTRIE = "merge_industrieproduktion_erzeugerpreise.xlsx"
 FINAL_MERGE_ENERGIE = "merge_energiepreise.xlsx"
+FINAL_WASTE = "env_waspac_final.xlsx"
 
 # Schlüsselspalten der Merges (Dokumentation der Join-Logik in merge_data.py)
 MERGE_A_KEYS = ["freq", "time", "geo", "nace_r2", "s_adj", "unit"]
