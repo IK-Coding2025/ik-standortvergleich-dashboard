@@ -326,6 +326,7 @@ def dual_achsen_chart(
     prefix_links: str = "",
     prefix_rechts: str = "",
     hover_nachkommastellen: int = 2,
+    legende_unten: bool = False,
 ) -> go.Figure:
     """Liniendiagramm mit zwei y-Achsen (links/rechts).
 
@@ -333,7 +334,8 @@ def dual_achsen_chart(
     ``prefix_links``/``prefix_rechts`` werden den Legenden-Einträgen
     vorangestellt (z. B. 'Strom: ' / 'Gas: '), damit erkennbar ist,
     welche Linie welche Größe zeigt. ``hover_nachkommastellen`` steuert
-    die Genauigkeit im Hover-Tooltip.
+    die Genauigkeit im Hover-Tooltip. ``legende_unten=True`` platziert
+    die Legende horizontal unter dem Diagramm.
     """
     fig = go.Figure()
     farb_index = 0
@@ -371,7 +373,7 @@ def dual_achsen_chart(
         yaxis=dict(title=y1_titel, side="left"),
         yaxis2=dict(title=y2_titel, overlaying="y", side="right"),
     )
-    return _basis_layout(fig, titel)
+    return _basis_layout(fig, titel, legende_unten)
 
 
 def optionen_label(df: pd.DataFrame, label_spalte: str) -> list:
@@ -1425,10 +1427,14 @@ def main() -> None:
         if df_links.empty and df_rechts.empty:
             st.info("Keine Daten für die gewählte Filterkombination.")
         else:
-            unit_text = (
-                _einheit_text(auswahl_unit_verp[0]) if len(auswahl_unit_verp) == 1
-                else "ausgewählte Einheiten"
+            pc_label = next(
+                (u for u in auswahl_unit_verp if "Prozent" in str(u)), None
             )
+            abs_units = [u for u in auswahl_unit_verp if u != pc_label]
+            y_titel_abs = " / ".join(
+                sorted(_einheit_text(u) for u in abs_units)
+            ) if abs_units else ""
+            y_titel_pc = _einheit_text(pc_label) if pc_label else ""
             abfall_text = (
                 auswahl_oper_links[0] if len(auswahl_oper_links) == 1
                 else "ausgewählte Maßnahmen"
@@ -1442,14 +1448,35 @@ def main() -> None:
                 st.subheader("Abfallaufkommen")
                 if df_links.empty:
                     st.info("Keine Daten für die linke Grafik.")
+                elif pc_label and abs_units:
+                    st.plotly_chart(
+                        dual_achsen_chart(
+                            df_links[df_links["unit_label"].isin(abs_units)],
+                            "value",
+                            df_links[df_links["unit_label"] == pc_label],
+                            "value",
+                            "Verpackungsabfall",
+                            y_titel_abs,
+                            y_titel_pc,
+                            ["geo_label", "wst_oper_label", "unit_label"],
+                            prefix_links="",
+                            prefix_rechts="Prozent: ",
+                            hover_nachkommastellen=1,
+                            legende_unten=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
                 else:
+                    unit_text = y_titel_abs or y_titel_pc
                     st.plotly_chart(
                         linien_chart(
                             df_links, "value",
                             f"Verpackungsabfall ({unit_text})",
                             unit_text,
-                            ["geo_label", "wst_oper_label"],
+                            ["geo_label", "wst_oper_label", "unit_label"],
                             legende_unten=True,
+                            hover_nachkommastellen=1,
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -1458,14 +1485,35 @@ def main() -> None:
                 st.subheader("Recycling / Verwertung")
                 if df_rechts.empty:
                     st.info("Keine Daten für die rechte Grafik.")
+                elif pc_label and abs_units:
+                    st.plotly_chart(
+                        dual_achsen_chart(
+                            df_rechts[df_rechts["unit_label"].isin(abs_units)],
+                            "value",
+                            df_rechts[df_rechts["unit_label"] == pc_label],
+                            "value",
+                            "Recycling / Verwertung",
+                            y_titel_abs,
+                            y_titel_pc,
+                            ["geo_label", "wst_oper_label", "unit_label"],
+                            prefix_links="",
+                            prefix_rechts="Prozent: ",
+                            hover_nachkommastellen=1,
+                            legende_unten=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
                 else:
+                    unit_text = y_titel_abs or y_titel_pc
                     st.plotly_chart(
                         linien_chart(
                             df_rechts, "value",
                             f"Recycling / Verwertung ({unit_text})",
                             unit_text,
-                            ["geo_label", "wst_oper_label"],
+                            ["geo_label", "wst_oper_label", "unit_label"],
                             legende_unten=True,
+                            hover_nachkommastellen=1,
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
