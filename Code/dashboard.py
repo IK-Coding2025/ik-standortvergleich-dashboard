@@ -910,7 +910,7 @@ def lesebeispiel_bevoelkerung(
         return
 
     teile = []
-    wert_2019 = bev_de[bev_de["time"] == "2019"]["value"]
+    wert_2019 = bev_de[bev_de["time"].astype(str) == "2019"]["value"]
     wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(bev_de, "value")
     if not wert_2019.empty and wert_aktuell is not None:
         w19 = wert_2019.iloc[-1]
@@ -924,8 +924,8 @@ def lesebeispiel_bevoelkerung(
 
     proj_de = df_proj_jan[df_proj_jan["geo_label"] == "Deutschland"]
     if not proj_de.empty:
-        wert_horizont = proj_de[proj_de["time"] == str(proj_ende)]["value"]
-        wert_2025 = proj_de[proj_de["time"] == "2025"]["value"]
+        wert_horizont = proj_de[proj_de["time"].astype(str) == str(proj_ende)]["value"]
+        wert_2025 = proj_de[proj_de["time"].astype(str) == "2025"]["value"]
         if not wert_horizont.empty and not wert_2025.empty:
             teile.append(
                 f"Die Projektion geht für Deutschland von "
@@ -947,7 +947,7 @@ def lesebeispiel_arbeitsmarkt(
 
     lfsa_de = df_lfsa[df_lfsa["geo_label"] == "Deutschland"]
     if not lfsa_de.empty:
-        wert_2019 = lfsa_de[lfsa_de["time"] == "2019"]["value"]
+        wert_2019 = lfsa_de[lfsa_de["time"].astype(str) == "2019"]["value"]
         wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(lfsa_de, "value")
         nace = (
             lfsa_de.sort_values("time_date")["nace_r2_label"].iloc[-1]
@@ -967,6 +967,7 @@ def lesebeispiel_arbeitsmarkt(
     if not jvs_de.empty:
         wert_aktuell, _, periode_aktuell, _ = letzter_wert_mit_vorjahr(jvs_de, "value")
         if wert_aktuell is not None:
+            periode_aktuell = str(periode_aktuell)
             periode_2019 = "2019" + periode_aktuell[4:]
             wert_2019 = jvs_de[jvs_de["time"] == periode_2019]["value"]
             nace = (
