@@ -1745,12 +1745,10 @@ def main() -> None:
 
     # == Tab 5: Bevölkerung & Arbeitsmarkt ===================================
     with tab_bev:
-        st.subheader("Bevölkerungsentwicklung")
-
         # Steuerungselemente der Bevölkerungsprojektion (oberhalb der Grafiken)
         scenarien = optionen_label(df_proj, "projection_label")
         auswahl_scenarien = st.multiselect(
-            "Projektionsszenario",
+            "Projektionsszenario Bevölkerung",
             options=scenarien,
             default=standard_label(scenarien, "Basisvorausberechnung"),
         )
