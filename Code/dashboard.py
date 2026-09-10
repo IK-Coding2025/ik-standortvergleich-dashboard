@@ -1836,6 +1836,15 @@ def main() -> None:
                     hover_text_func_rechts=lambda v: f"{v:.1f} %".replace(".", ","),
                     legende_unten=True,
                 )
+                jahre = list(range(2025, proj_ende + 1, 10))
+                tick_dates = pd.to_datetime([f"{y}-01-01" for y in jahre])
+                fig_proj.update_xaxes(
+                    title_text="Jahr",
+                    tickmode="array",
+                    tickvals=tick_dates,
+                    ticktext=jahre,
+                    tickangle=0,
+                )
                 st.plotly_chart(
                     fig_proj,
                     use_container_width=True,
