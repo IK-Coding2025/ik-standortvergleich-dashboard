@@ -1758,6 +1758,15 @@ def main() -> None:
             max_value=2100,
             value=2060,
         )
+        auswahl_bev = st.multiselect(
+            "Länder / Regionen",
+            options=alle_geos,
+            default=standard_label(alle_geos, "Deutschland"),
+            format_func=label_kurz_klammer,
+        )
+        if not auswahl_bev:
+            st.warning("Bitte mindestens ein Land / eine Region auswählen.")
+            st.stop()
 
         jan_label = standard_label(
             optionen_label(df_proj, "indic_de_label"),
@@ -1768,7 +1777,7 @@ def main() -> None:
             "15-64",
         )[0]
         df_proj_f = df_proj[
-            df_proj["geo_label"].isin(auswahl_geos)
+            df_proj["geo_label"].isin(auswahl_bev)
             & df_proj["projection_label"].isin(auswahl_scenarien)
             & (df_proj["time_date"].dt.year <= proj_ende)
         ]
@@ -1782,7 +1791,7 @@ def main() -> None:
                 "<h3>Bevölkerung (1. Januar)</h3>", unsafe_allow_html=True
             )
             df_bev_f = zeitraum_filter(
-                df_bev[df_bev["geo_label"].isin(auswahl_geos)], *von_bis
+                df_bev[df_bev["geo_label"].isin(auswahl_bev)], *von_bis
             )
             if df_bev_f.empty:
                 st.info("Keine Bevölkerungsdaten für die gewählte Auswahl.")
@@ -1867,7 +1876,7 @@ def main() -> None:
             )
             df_lfsa_f = zeitraum_filter(
                 df_lfsa[
-                    df_lfsa["geo_label"].isin(auswahl_geos)
+                    df_lfsa["geo_label"].isin(auswahl_bev)
                     & df_lfsa["nace_r2_label"].isin(auswahl_nace_bev)
                 ], *von_bis
             )
@@ -1904,7 +1913,7 @@ def main() -> None:
             )
             df_jvs_f = zeitraum_filter(
                 df_jvs[
-                    df_jvs["geo_label"].isin(auswahl_geos)
+                    df_jvs["geo_label"].isin(auswahl_bev)
                     & df_jvs["nace_r2_1_label"].isin(auswahl_nace_jvs)
                 ], *von_bis
             )
