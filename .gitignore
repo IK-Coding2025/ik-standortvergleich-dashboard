@@ -4,3 +4,4 @@ __pycache__/
 Output Excel/pipeline.log
 Prompt/
 Dashboard/
+~$*.xlsx
