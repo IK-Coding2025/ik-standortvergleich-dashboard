@@ -1114,7 +1114,10 @@ def main() -> None:
     # Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
     st.markdown(
         "<style>"
-        "button[role='tab']:nth-of-type(5) * { color: #006400 !important; }"
+        "button[data-baseweb='tab']:nth-of-type(5) p, "
+        "button[data-baseweb='tab']:nth-of-type(5) span, "
+        "button[data-baseweb='tab']:nth-of-type(5) div "
+        "{ color: #006400 !important; }"
         "</style>",
         unsafe_allow_html=True,
     )
