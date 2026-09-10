@@ -1919,7 +1919,7 @@ def main() -> None:
             auswahl_nace_jvs = st.multiselect(
                 "Wirtschaftszweig",
                 options=nace_bev_optionen,
-                default=standard_label(nace_bev_optionen, "C –"),
+                default=standard_label(nace_bev_optionen, "Verarbeitendes Gewerbe"),
             )
             df_jvs_f = zeitraum_filter(
                 df_jvs[
