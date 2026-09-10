@@ -1927,16 +1927,19 @@ def main() -> None:
                     ["geo_label", "nace_r2_1_label"],
                     legende_unten=True,
                 )
-                # X-Achse mit Quartalsbeschriftungen statt Monaten
+                # X-Achse in Jahresschritten (nur Q1-Ticks)
                 ticks = (
                     df_jvs_f[["time_date", "time"]]
                     .drop_duplicates()
                     .sort_values("time_date")
                 )
+                jahre_ticks = ticks[ticks["time"].astype(str).str.endswith("-Q1")]
+                if jahre_ticks.empty:
+                    jahre_ticks = ticks.iloc[::4]
                 fig_jvs.update_xaxes(
                     tickmode="array",
-                    tickvals=ticks["time_date"],
-                    ticktext=ticks["time"],
+                    tickvals=jahre_ticks["time_date"],
+                    ticktext=jahre_ticks["time"].astype(str).str[:4],
                     tickangle=45,
                 )
                 st.plotly_chart(
