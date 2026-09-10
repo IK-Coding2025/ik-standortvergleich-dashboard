@@ -1112,6 +1112,13 @@ def main() -> None:
     # Header im Stil des IK-Wirtschafts-Dashboards: kleines zentriertes
     # Logo (feste Pixelbreite, versionsunabhängig via HTML-Einbettung),
     # Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
+    st.markdown(
+        "<style>"
+        "button[role='tab']:nth-of-type(5) * { color: #006400 !important; }"
+        "</style>",
+        unsafe_allow_html=True,
+    )
+
     logo = finde_logo()
     if logo:
         logo_b64 = base64.b64encode(
