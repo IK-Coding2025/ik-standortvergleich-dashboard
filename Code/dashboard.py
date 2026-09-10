@@ -1878,7 +1878,13 @@ def main() -> None:
                 )
         with unten_rechts:
             st.markdown(
-                "<h3>Quote der offenen Stellen</h3>", unsafe_allow_html=True
+                "<h3 title='Die Quote der offenen Stellen zeigt, wie viel "
+                "Prozent aller Arbeitsplätze in einer Wirtschaft unbesetzt "
+                "sind. Die Daten basieren primär auf repräsentativen "
+                "Unternehmensbefragungen der nationalen statistischen Ämter "
+                "(in Deutschland z. B. der IAB-Stellenerhebung).'>"
+                "Quote der offenen Stellen ℹ</h3>",
+                unsafe_allow_html=True,
             )
             nace_bev_optionen = optionen_label(df_jvs, "nace_r2_1_label")
             auswahl_nace_jvs = st.multiselect(
@@ -1919,13 +1925,6 @@ def main() -> None:
                     use_container_width=True,
                     config={"locale": "de"},
                 )
-            st.caption(
-                "Die Quote der offenen Stellen zeigt, wie viel Prozent aller "
-                "Arbeitsplätze in einer Wirtschaft unbesetzt sind. Die Daten "
-                "basieren primär auf repräsentativen Unternehmensbefragungen der "
-                "nationalen statistischen Ämter (in Deutschland z. B. der "
-                "IAB-Stellenerhebung)."
-            )
 
         lesebeispiel_arbeitsmarkt(df_lfsa_f, df_jvs_f)
 
