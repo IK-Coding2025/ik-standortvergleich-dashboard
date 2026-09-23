@@ -348,7 +348,7 @@ def linien_chart(
     titel: str,
     y_achsen_titel: str,
     gruppierung: list,
-    legende_unten: bool = False,
+    legende_unten: bool = True,
     hover_nachkommastellen: int = 2,
     hover_text_func=None,
 ) -> go.Figure:
@@ -412,7 +412,7 @@ def dual_achsen_chart(
     prefix_links: str = "",
     prefix_rechts: str = "",
     hover_nachkommastellen: int = 2,
-    legende_unten: bool = False,
+    legende_unten: bool = True,
     hover_text_func_links=None,
     hover_text_func_rechts=None,
 ) -> go.Figure:
