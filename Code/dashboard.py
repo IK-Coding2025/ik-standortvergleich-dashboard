@@ -333,6 +333,7 @@ def _basis_layout(
         title=dict(text=titel, font=dict(color=IK_BLAU, size=16)),
         hovermode="x unified",
         legend=legende,
+        showlegend=True,
         height=460,
         margin=dict(l=20, r=20, t=60, b=20),
         plot_bgcolor="white",
@@ -351,6 +352,7 @@ def linien_chart(
     legende_unten: bool = True,
     hover_nachkommastellen: int = 2,
     hover_text_func=None,
+    name_immer_kombiniert: bool = False,
 ) -> go.Figure:
     """Liniendiagramm mit einer Linie je Gruppenkombination.
 
@@ -361,11 +363,19 @@ def linien_chart(
     '0,06' anzeigen würden).
     ``hover_text_func`` erlaubt eine benutzerdefinierte Formatierung des
     Hover-Werts, z. B. `lambda v: f"{v/1e6:.1f} Mio."`.
+    ``name_immer_kombiniert=True`` zeigt in der Legende stets alle
+    Gruppierungsebenen an (statt nur die erste, wenn die letzte Ebene im
+    gesamten DataFrame konstant ist) – wichtig, wenn die zweite Ebene
+    inhaltlich relevant bleibt, auch bei nur einer ausgewählten Ausprägung
+    (z. B. Außenhandel: Land + Warengruppe/NACE-Code).
     """
     fig = go.Figure()
     gruppiert = df.dropna(subset=[wert_spalte]).groupby(gruppierung, sort=True)
     farben = _farbe_mapping([(df, wert_spalte)], gruppierung)
-    mehrere_gruppen = len(df[gruppierung[-1]].unique()) > 1 if gruppierung else False
+    mehrere_gruppen = (
+        name_immer_kombiniert
+        or (len(df[gruppierung[-1]].unique()) > 1 if gruppierung else False)
+    )
     for schluessel, teil in gruppiert:
         if not isinstance(schluessel, tuple):
             schluessel = (schluessel,)
@@ -1051,6 +1061,151 @@ def ohne_code_spalten(df: pd.DataFrame) -> pd.DataFrame:
 
 
 # ---------------------------------------------------------------------------
+# Außenhandel (ds_045409)
+# ---------------------------------------------------------------------------
+def aussenhandel_aggregieren(df: pd.DataFrame, gruppen_spalte: str) -> pd.DataFrame:
+    """Aggregiert die Außenhandelsdaten je Jahr, Land, Partner und Flow.
+
+    ``gruppen_spalte`` ist entweder ``wz_label`` (NACE-Aggregat, Default)
+    oder ``produktgruppe_label`` (Detailebene je Warengruppe); mehrere
+    Warennummern werden dabei je Gruppe pro Jahr aufsummiert.
+    ``sub_label`` fasst Partner und Gruppe zusammen und dient als zweite
+    Gruppierungsebene der Charts (erste Ebene bleibt ``geo_label`` für die
+    einheitliche Deutschland-/EU-Farbgebung).
+    """
+    agg = (
+        df.dropna(subset=["value", gruppen_spalte])
+        .groupby(
+            ["geo_label", "partner_label", "flow_label",
+             "time", "time_date", gruppen_spalte],
+            as_index=False,
+        )["value"].sum()
+    )
+    mehrere_partner = agg["partner_label"].nunique() > 1
+    mehrere_gruppen = agg[gruppen_spalte].nunique() > 1
+    if mehrere_partner and mehrere_gruppen:
+        agg["sub_label"] = (
+            agg["partner_label"].astype(str) + " – " + agg[gruppen_spalte].astype(str)
+        )
+    elif mehrere_partner:
+        agg["sub_label"] = agg["partner_label"].astype(str)
+    else:
+        agg["sub_label"] = agg[gruppen_spalte].astype(str)
+    return agg
+
+
+def aussenhandelsbilanz(agg: pd.DataFrame) -> pd.DataFrame:
+    """Berechnet die Außenhandelsbilanz (Export minus Import) je Gruppe."""
+    pivot = agg.pivot_table(
+        index=["geo_label", "sub_label", "time", "time_date"],
+        columns="flow_label", values="value", aggfunc="sum",
+    ).reset_index()
+    for spalte in ("Import", "Export"):
+        if spalte not in pivot.columns:
+            pivot[spalte] = 0.0
+    pivot["value"] = pivot["Export"].fillna(0) - pivot["Import"].fillna(0)
+    return pivot
+
+
+def top_partner_ermitteln(
+    df: pd.DataFrame, flow_name: str, top_n: int = 10
+) -> tuple[pd.DataFrame | None, str | None]:
+    """Ermittelt die Top-N-Partnerländer nach Handelsvolumen im jüngsten Jahr.
+
+    Aggregatcodes (z. B. ``WORLD``, ``EXT_EU27_2020``) werden ausgeschlossen,
+    damit nur echte (zweistellige) Partnerländer in die Rangliste einfließen.
+    """
+    teil = df[
+        (df["flow_label"] == flow_name)
+        & df["partner"].astype(str).str.fullmatch(r"[A-Z]{2}")
+    ]
+    if teil.empty:
+        return None, None
+    juengste_periode = teil.loc[teil["time_date"].idxmax(), "time"]
+    teil = teil[teil["time"] == juengste_periode]
+    rang = (
+        teil.groupby("partner_label", as_index=False)["value"].sum()
+        .sort_values("value", ascending=False)
+        .head(top_n)
+    )
+    return rang, juengste_periode
+
+
+def top_partner_balken(rang: pd.DataFrame, titel: str) -> go.Figure:
+    """Senkrechtes Balkendiagramm der Top-Partnerländer nach Handelsvolumen."""
+    rang_sortiert = rang.sort_values("value", ascending=False)  # Platz 1 links
+    fig = go.Figure(
+        go.Bar(
+            x=rang_sortiert["partner_label"],
+            y=rang_sortiert["value"] * 0.1,
+            orientation="v",
+            marker_color=IK_BLAU,
+            hovertemplate="%{x}: %{y:,.1f} t<extra></extra>",
+        )
+    )
+    fig.update_xaxes(title_text="")
+    fig.update_yaxes(title_text="Menge (Tonnen)")
+    fig = _basis_layout(fig, titel, legende_unten=False)
+    fig.update_layout(showlegend=False)
+    return fig
+
+
+def lesebeispiel_aussenhandel_bilanz(
+    df_import: pd.DataFrame, df_export: pd.DataFrame, df_bilanz: pd.DataFrame,
+    partner_text: str, gruppe_text: str,
+) -> None:
+    """Lesebeispiel zu Import/Export/Außenhandelsbilanz (erste Grafikreihe)."""
+    teile = []
+    imp_de = df_import[df_import["geo_label"] == "Deutschland"]
+    exp_de = df_export[df_export["geo_label"] == "Deutschland"]
+    bil_de = df_bilanz[df_bilanz["geo_label"] == "Deutschland"]
+
+    wert_imp, _, periode_imp, _ = letzter_wert_mit_vorjahr(imp_de, "value")
+    wert_exp, _, periode_exp, _ = letzter_wert_mit_vorjahr(exp_de, "value")
+    if wert_imp is not None and wert_exp is not None:
+        teile.append(
+            f"Im Jahr **{periode_exp}** importierte Deutschland bei "
+            f"'{gruppe_text}' (Partner: {partner_text}) "
+            f"**{fmt_de(wert_imp * 0.1, 1)} Tonnen** und exportierte "
+            f"**{fmt_de(wert_exp * 0.1, 1)} Tonnen**."
+        )
+    if not bil_de.empty:
+        letzte_bilanz = bil_de.sort_values("time_date").iloc[-1]
+        bilanz_wert = letzte_bilanz["value"] * 0.1
+        teile.append(
+            f"Die Außenhandelsbilanz (Export – Import) lag damit bei "
+            f"**{fmt_de(bilanz_wert, 1)} Tonnen** "
+            f"({'Exportüberschuss' if bilanz_wert >= 0 else 'Importüberschuss'})."
+        )
+    if teile:
+        st.info(f"**Lesebeispiel:** {' '.join(teile)}")
+
+
+def lesebeispiel_aussenhandel_top_partner(
+    top_import: pd.DataFrame | None, top_export: pd.DataFrame | None,
+    gruppe_text: str,
+) -> None:
+    """Lesebeispiel zu den Top-10-Partnerländer-Grafiken (zweite Grafikreihe)."""
+    teile = []
+    if top_import is not None and not top_import.empty:
+        spitze = top_import.iloc[0]
+        teile.append(
+            f"Bei '{gruppe_text}' war **{spitze['partner_label']}** im "
+            f"jüngsten Jahr das wichtigste Herkunftsland beim Import mit "
+            f"**{fmt_de(spitze['value'] * 0.1, 1)} Tonnen**."
+        )
+    if top_export is not None and not top_export.empty:
+        spitze = top_export.iloc[0]
+        teile.append(
+            f"Wichtigstes Zielland beim Export war "
+            f"**{spitze['partner_label']}** mit "
+            f"**{fmt_de(spitze['value'] * 0.1, 1)} Tonnen**."
+        )
+    if teile:
+        st.info(f"**Lesebeispiel:** {' '.join(teile)}")
+
+
+# ---------------------------------------------------------------------------
 # Daten laden (mit Fehlermeldung bei fehlenden Dateien)
 # ---------------------------------------------------------------------------
 def lade_alle_tabellen():
@@ -1073,6 +1228,7 @@ def lade_alle_tabellen():
         config.FINAL_PROJ,
         config.FINAL_LFSA,
         config.FINAL_JVS,
+        config.FINAL_AUSSENHANDEL,
     ]
     fehlend = [d for d in dateien if not (config.OUTPUT_DIR / d).exists()]
     if fehlend:
@@ -1096,7 +1252,7 @@ def lade_alle_tabellen():
 def main() -> None:
     (
         df_arbeit, df_energie, df_inpr, df_inppd, df_verpackung,
-        df_bev, df_proj, df_lfsa, df_jvs,
+        df_bev, df_proj, df_lfsa, df_jvs, df_aussenhandel,
     ) = lade_alle_tabellen()
     # Rohdaten für Tab 3 vorbereiten: NACE-Code in die Bezeichnung
     # aufnehmen und Wert-Spalten herkunftsbezogen benennen (gleiche Namen
@@ -1114,9 +1270,9 @@ def main() -> None:
     # Titel und Unterzeile in IK-Blau, Datenstand dezent darunter
     st.markdown(
         "<style>"
-        "button[data-baseweb='tab']:nth-of-type(5) p, "
-        "button[data-baseweb='tab']:nth-of-type(5) span, "
-        "button[data-baseweb='tab']:nth-of-type(5) div "
+        "button[data-baseweb='tab']:nth-of-type(6) p, "
+        "button[data-baseweb='tab']:nth-of-type(6) span, "
+        "button[data-baseweb='tab']:nth-of-type(6) div "
         "{ color: #006400 !important; }"
         "</style>",
         unsafe_allow_html=True,
@@ -1203,10 +1359,14 @@ def main() -> None:
     )
 
     # --- Tabs ----------------------------------------------------------------
-    tab_arbeit, tab_energie, tab_industrie, tab_bev, tab_verpackung = st.tabs(
+    (
+        tab_arbeit, tab_energie, tab_industrie, tab_aussenhandel,
+        tab_bev, tab_verpackung,
+    ) = st.tabs(
         [
             "Arbeitskosten", "Energiepreise",
             "Industrieproduktion & Erzeugerpreise",
+            "Außenhandel",
             "Bevölkerung & Arbeitsmarkt",
             "Verpackungsabfälle & Recyclingquoten",
         ]
@@ -1581,7 +1741,215 @@ def main() -> None:
                 )
             st.caption("Quelle: Eurostat – sts_inpr_m, sts_inppd_m")
 
-    # == Tab 4: Verpackungsabfälle & Recyclingquoten ===========================
+    # == Tab 4: Außenhandel ====================================================
+    with tab_aussenhandel:
+        st.caption(
+            "Berichtsland Deutschland (DE) bzw. Europäische Union - 27 "
+            "(Extra-EU-Handel); abgerufen werden die Daten für alle "
+            "Partnerländer, damit ein beliebiger Handelspartner ausgewählt "
+            "werden kann."
+        )
+        f1, f2 = st.columns(2)
+        with f1:
+            geo_optionen_ah = optionen_label(df_aussenhandel, "geo_label")
+            auswahl_geo_ah = st.multiselect(
+                "Berichtsland",
+                options=geo_optionen_ah,
+                default=standard_label(geo_optionen_ah, "Deutschland"),
+            )
+        with f2:
+            partner_optionen = optionen_label(df_aussenhandel, "partner_label")
+            auswahl_partner = st.multiselect(
+                "Handelspartner",
+                options=partner_optionen,
+                default=standard_label(partner_optionen, "China"),
+            )
+
+        aggregationsebene = st.radio(
+            "Aggregationsebene",
+            options=["Wirtschaftszweig (NACE)", "Warengruppe (Detail)"],
+            index=0,
+            horizontal=True,
+        )
+        if aggregationsebene == "Wirtschaftszweig (NACE)":
+            gruppen_spalte = "wz_label"
+            gruppen_optionen = optionen_label(df_aussenhandel, "wz_label")
+            gruppen_default = [
+                g for g in gruppen_optionen
+                if str(g).startswith(("2221", "2222"))
+            ] or gruppen_optionen
+            with st.expander("Erklärung der Wirtschaftszweige (NACE)"):
+                st.markdown(
+                    "\n".join(
+                        f"- **{code}**: {text}"
+                        for code, text in config.WZ_LABELS.items()
+                    )
+                )
+                st.caption(
+                    "Hinweis: Die Zuordnung der Warennummern zu den "
+                    "Wirtschaftszweigen ist **keine vollständige, amtliche "
+                    "Zuordnung** (wie sie z. B. die offiziellen PRODCOM–KN-"
+                    "Korrespondenztabellen von Eurostat für alle KN-Codes "
+                    "je Wirtschaftszweig liefern), sondern eine "
+                    "**Annäherung anhand der hier ausgewählten "
+                    "Warennummern**. Die Werte je NACE-Code umfassen daher "
+                    "nur den Außenhandel mit den im Dashboard hinterlegten "
+                    "Warennummern und nicht den vollständigen Außenhandel "
+                    "des jeweiligen Wirtschaftszweigs."
+                )
+        else:
+            gruppen_spalte = "produktgruppe_label"
+            gruppen_optionen = optionen_label(df_aussenhandel, "produktgruppe_label")
+            gruppen_default = standard_label(gruppen_optionen, "Verpackung / Folien aus LDPE")
+
+        auswahl_gruppe = st.multiselect(
+            "Warennummer",
+            options=gruppen_optionen,
+            default=gruppen_default,
+        )
+
+        df_ah = zeitraum_filter(
+            df_aussenhandel[
+                df_aussenhandel["geo_label"].isin(auswahl_geo_ah)
+                & df_aussenhandel["partner_label"].isin(auswahl_partner)
+                & df_aussenhandel[gruppen_spalte].isin(auswahl_gruppe)
+            ],
+            *von_bis,
+        )
+
+        if df_ah.empty:
+            st.info("Keine Daten für die gewählte Filterkombination.")
+        else:
+            agg = aussenhandel_aggregieren(df_ah, gruppen_spalte)
+            agg_import = agg[agg["flow_label"] == "Import"]
+            agg_export = agg[agg["flow_label"] == "Export"]
+            bilanz = aussenhandelsbilanz(agg)
+            hover_tonnen = lambda v: f"{fmt_de(v * 0.1, 1)} t"
+
+            spalte_imp, spalte_exp, spalte_bil = st.columns(3)
+            with spalte_imp:
+                st.subheader("Import")
+                if agg_import.empty:
+                    st.info("Keine Importdaten für die gewählte Auswahl.")
+                else:
+                    st.plotly_chart(
+                        linien_chart(
+                            agg_import, "value",
+                            "Import", "Menge (Tonnen)",
+                            ["geo_label", "sub_label"],
+                            legende_unten=True,
+                            hover_text_func=hover_tonnen,
+                            name_immer_kombiniert=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+            with spalte_exp:
+                st.subheader("Export")
+                if agg_export.empty:
+                    st.info("Keine Exportdaten für die gewählte Auswahl.")
+                else:
+                    st.plotly_chart(
+                        linien_chart(
+                            agg_export, "value",
+                            "Export", "Menge (Tonnen)",
+                            ["geo_label", "sub_label"],
+                            legende_unten=True,
+                            hover_text_func=hover_tonnen,
+                            name_immer_kombiniert=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+            with spalte_bil:
+                st.subheader("Außenhandelsbilanz")
+                if bilanz.empty:
+                    st.info("Keine Daten für die Außenhandelsbilanz.")
+                else:
+                    st.plotly_chart(
+                        linien_chart(
+                            bilanz, "value",
+                            "Außenhandelsbilanz (Export – Import)",
+                            "Menge (Tonnen)",
+                            ["geo_label", "sub_label"],
+                            legende_unten=True,
+                            hover_text_func=hover_tonnen,
+                            name_immer_kombiniert=True,
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+
+            partner_text = (
+                ", ".join(auswahl_partner) if len(auswahl_partner) <= 3
+                else "mehrere Partnerländer"
+            )
+            gruppe_text = (
+                auswahl_gruppe[0] if len(auswahl_gruppe) == 1
+                else "ausgewählte Warengruppen"
+            )
+            lesebeispiel_aussenhandel_bilanz(
+                agg_import, agg_export, bilanz, partner_text, gruppe_text
+            )
+
+            # --- Zweite Reihe: Top 10 Partnerländer (unabhängig von der
+            # Handelspartner-Auswahl oben, bezogen auf das erste gewählte
+            # Berichtsland) ------------------------------------------------
+            df_top_basis = df_aussenhandel[
+                df_aussenhandel["geo_label"].isin(auswahl_geo_ah[:1])
+                & df_aussenhandel[gruppen_spalte].isin(auswahl_gruppe)
+            ]
+            df_top_basis = zeitraum_filter(df_top_basis, *von_bis)
+            top_import, periode_top_imp = top_partner_ermitteln(
+                df_top_basis, "Import"
+            )
+            top_export, periode_top_exp = top_partner_ermitteln(
+                df_top_basis, "Export"
+            )
+            spalte_top_imp, spalte_top_exp = st.columns(2)
+            with spalte_top_imp:
+                if top_import is None or top_import.empty:
+                    st.info("Keine Importdaten für die Top-10-Rangliste.")
+                else:
+                    st.plotly_chart(
+                        top_partner_balken(
+                            top_import,
+                            f"Top 10 Import-Länder ({periode_top_imp})",
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+            with spalte_top_exp:
+                if top_export is None or top_export.empty:
+                    st.info("Keine Exportdaten für die Top-10-Rangliste.")
+                else:
+                    st.plotly_chart(
+                        top_partner_balken(
+                            top_export,
+                            f"Top 10 Export-Länder ({periode_top_exp})",
+                        ),
+                        use_container_width=True,
+                        config={"locale": "de"},
+                    )
+
+            lesebeispiel_aussenhandel_top_partner(
+                top_import, top_export, gruppe_text
+            )
+
+            with st.expander("Daten anzeigen"):
+                st.dataframe(
+                    anzeige_tabelle(df_ah),
+                    use_container_width=True,
+                    hide_index=True,
+                )
+        st.caption(
+            "Quelle: Eurostat Comext – ds-045409 (Außenhandel nach "
+            "HS/KN-Warennummern), Indikator QUANTITY_IN_100KG (Menge in "
+            "100 kg, im Dashboard in Tonnen umgerechnet); Reporter "
+            "Deutschland bzw. Europäische Union - 27 (Extra-EU-Handel)."
+        )
+
+    # == Tab 6: Verpackungsabfälle & Recyclingquoten ===========================
     with tab_verpackung:
         df = zeitraum_filter(
             df_verpackung[df_verpackung["geo_label"].isin(auswahl_geos)],

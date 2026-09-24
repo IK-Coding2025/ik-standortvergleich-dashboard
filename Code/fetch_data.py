@@ -104,6 +104,70 @@ def fetch_jsonstat(
     )
 
 
+def fetch_comext_jsonstat(
+    dataset_code: str,
+    freq: list,
+    reporter: list,
+    partner: list,
+    product: list,
+    flow: list,
+    indicators: list,
+    start_period: str,
+) -> dict:
+    """Ruft einen Comext-Datensatz (Präfix ``DS-``) als JSON-stat 2.0 ab.
+
+    Comext-Datensätze (z. B. ``ds-045409`` – Außenhandel) liegen auf einem
+    eigenen API-Endpunkt (``config.COMEXT_BASE_URL``) und werden per
+    SDMX-2.1-Schlüsselpfad statt per Query-Parametern gefiltert:
+    ``{freq}.{reporter}.{partner}.{product}.{flow}.{indicators}``.
+    Mehrere Werte je Dimension werden mit ``+`` verknüpft; eine leere Liste
+    bedeutet "alle Werte dieser Dimension" (z. B. alle Partnerländer).
+    Die Antwortstruktur entspricht der regulären Dissemination-API, daher
+    wird ``parse_jsonstat`` unverändert wiederverwendet.
+    """
+    schluessel = ".".join(
+        "+".join(werte) for werte in (freq, reporter, partner, product, flow, indicators)
+    )
+    url = f"{config.COMEXT_BASE_URL}/{dataset_code}/{schluessel}"
+    params = {"format": "JSON", "lang": config.LANG, "startPeriod": start_period}
+
+    letzter_fehler = None
+    for versuch in range(1, config.MAX_RETRIES + 1):
+        try:
+            antwort = requests.get(
+                url, params=params, timeout=config.REQUEST_TIMEOUT
+            )
+        except requests.RequestException as exc:
+            letzter_fehler = exc
+            logger.warning(
+                "%s: Abruf fehlgeschlagen (Versuch %d/%d): %s",
+                dataset_code, versuch, config.MAX_RETRIES, exc,
+            )
+        else:
+            if antwort.status_code == 200:
+                return antwort.json()
+            if 400 <= antwort.status_code < 500:
+                raise RuntimeError(
+                    f"{dataset_code}: API-Fehler {antwort.status_code} "
+                    f"(kein Retry bei 4xx): {antwort.text[:300]}"
+                )
+            letzter_fehler = RuntimeError(
+                f"HTTP {antwort.status_code}: {antwort.text[:300]}"
+            )
+            logger.warning(
+                "%s: Server-Fehler %d (Versuch %d/%d)",
+                dataset_code, antwort.status_code, versuch, config.MAX_RETRIES,
+            )
+        if versuch < config.MAX_RETRIES:
+            wartezeit = config.RETRY_BACKOFF_SECONDS ** versuch
+            logger.info("%s: Neuer Versuch in %d s ...", dataset_code, wartezeit)
+            time.sleep(wartezeit)
+    raise RuntimeError(
+        f"{dataset_code}: Abruf nach {config.MAX_RETRIES} Versuchen "
+        f"fehlgeschlagen. Letzter Fehler: {letzter_fehler}"
+    )
+
+
 # ---------------------------------------------------------------------------
 # JSON-stat 2.0 -> Long-Format-DataFrame
 # ---------------------------------------------------------------------------
@@ -380,6 +444,64 @@ def fetch_jvs_q_r21() -> pd.DataFrame:
     return fetch_dataset("jvs_q_r21", config.DATASETS["jvs_q_r21"])
 
 
+def fetch_ds_045409() -> pd.DataFrame:
+    """Datensatz ds_045409 – Außenhandel (Comext, Menge in 100 kg).
+
+    Reporter DE + EU27_2020, alle Partnerländer, jährliche Werte für die
+    definierten Warennummern (Import + Export, ``QUANTITY_IN_100KG``).
+    """
+    spez = config.DATASETS["ds_045409"]
+    abruf_zeitpunkt = datetime.now()
+    start_period = spez["start_period"]
+    logger.info(
+        "Starte Abruf: ds_045409 (%s) | Reporter=%s, Partner=alle, "
+        "Produkte=%d, Flow=%s | ab %s",
+        spez["beschreibung"], spez["reporter"], len(spez["product"]),
+        spez["flow"], start_period,
+    )
+    payload = fetch_comext_jsonstat(
+        spez["dataset_code"],
+        spez["freq"], spez["reporter"], spez["partner"],
+        spez["product"], spez["flow"], spez["indicators"],
+        start_period,
+    )
+    df = parse_jsonstat(payload)
+    for dim, erlaubt in (
+        ("freq", spez["freq"]),
+        ("reporter", spez["reporter"]),
+        ("flow", spez["flow"]),
+        ("indicators", spez["indicators"]),
+    ):
+        verstoesse = sorted(set(df[dim].unique()) - set(erlaubt))
+        if verstoesse:
+            raise ValueError(
+                f"ds_045409: Pflichtfilter '{dim}' verletzt – "
+                f"unerlaubte Codes: {verstoesse} (erlaubt: {erlaubt})"
+            )
+
+    pfad = config.OUTPUT_DIR / spez["datei"]
+    export_excel(df, pfad)
+    logger.info(
+        "ds_045409: %d Zeilen exportiert -> %s (Abruf: %s)",
+        len(df), pfad, abruf_zeitpunkt.strftime("%Y-%m-%d %H:%M:%S"),
+    )
+    _aktualisiere_metadata(
+        "ds_045409",
+        {
+            "beschreibung": spez["beschreibung"],
+            "abruf_zeitpunkt": abruf_zeitpunkt.isoformat(timespec="seconds"),
+            "zeilen": int(len(df)),
+            "filter": {
+                "reporter": spez["reporter"], "flow": spez["flow"],
+                "indicators": spez["indicators"], "product_anzahl": len(spez["product"]),
+            },
+            "start_period": start_period,
+            "datei": spez["datei"],
+        },
+    )
+    return df
+
+
 def main() -> None:
     """Führt den Abruf aller Datensätze nacheinander aus."""
     config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
@@ -395,6 +517,7 @@ def main() -> None:
         fetch_proj_25ndbi,
         fetch_lfsa_egan22d,
         fetch_jvs_q_r21,
+        fetch_ds_045409,
     ]
     fehler = []
     for abruf in abrufe:

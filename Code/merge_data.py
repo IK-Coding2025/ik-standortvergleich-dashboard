@@ -294,6 +294,74 @@ def finalisiere_stellenquote() -> pd.DataFrame:
     return df
 
 
+# Vereinfachte deutsche Bezeichnungen je Reporter (statt der langen
+# Comext-Standardtexte inkl. historischer Zusätze); EU27_2020 wird hier
+# konzeptionell als "Extra-EU"-Außenhandel verstanden, da die EU als Ganzes
+# keinen Binnenhandel mit sich selbst als "Außenhandel" ausweist.
+_AUSSENHANDEL_GEO_LABELS = {
+    "DE": "Deutschland",
+    "EU27_2020": "Europäische Union - 27 (Extra-EU-Handel)",
+}
+_AUSSENHANDEL_FLOW_LABELS = {"1": "Import", "2": "Export"}
+
+
+def finalisiere_aussenhandel() -> pd.DataFrame:
+    """Finalisiert den Außenhandels-Datensatz (Comext ds_045409).
+
+    - Reporter (``reporter``) wird zu ``geo``/``geo_label`` (Deutschland /
+      Europäische Union - 27) analog zu den übrigen Tabs umbenannt.
+    - Produktcode (``product``) wird zu ``warennummer``; zusätzlich werden
+      die Produktgruppen-Bezeichnung (inkl. Warennummern in Klammern) sowie
+      der zugehörige NACE-Code (``wz``) mit Erklärtext (``wz_label``)
+      ergänzt.
+    - Flow-Code wird auf die deutschen Bezeichnungen "Import"/"Export"
+      vereinheitlicht (statt der amtlichen Begriffe Einfuhr/Ausfuhr).
+    - Konstante bzw. redundante Spalten (freq, indicators, status) entfallen.
+    """
+    df = load_raw("ds_045409").copy()
+
+    df["geo"] = df["reporter"]
+    df["geo_label"] = df["reporter"].map(_AUSSENHANDEL_GEO_LABELS).fillna(
+        df["reporter_label"]
+    )
+
+    df["warennummer"] = df["product"].astype(str)
+    df["produktgruppe"] = df["warennummer"].map(
+        config.WARENNUMMER_ZU_PRODUKTGRUPPE
+    )
+    df["produktgruppe_label"] = df.apply(
+        lambda z: (
+            f"{z['produktgruppe']} "
+            f"({', '.join(config.PRODUKTGRUPPEN.get(z['produktgruppe'], []))})"
+        ) if pd.notna(z["produktgruppe"]) else z["product_label"],
+        axis=1,
+    )
+
+    df["wz"] = df["warennummer"].map(config.warennummer_zu_wz)
+    df["wz_label"] = df["wz"].map(
+        lambda w: f"{w} – {config.WZ_LABELS[w]}" if pd.notna(w) else None
+    )
+
+    df["flow_label"] = df["flow"].astype(str).map(_AUSSENHANDEL_FLOW_LABELS)
+
+    df = df.drop(
+        columns=[
+            "freq", "freq_label", "reporter", "reporter_label",
+            "product", "product_label", "flow", "indicators",
+            "indicators_label", "status", "time_label",
+        ],
+        errors="ignore",
+    )
+    vor_dropna = len(df)
+    df = df.dropna(subset=["wz"]).reset_index(drop=True)
+    logger.info(
+        "Außenhandel finalisiert: %d Zeilen (davon %d ohne NACE-Zuordnung "
+        "entfernt)",
+        len(df), vor_dropna - len(df),
+    )
+    return df
+
+
 def _schreibe_merge_metadata() -> None:
     """Ergänzt den Merge-Zeitpunkt in ``fetch_metadata.json``."""
     meta = {}
@@ -315,6 +383,7 @@ def _schreibe_merge_metadata() -> None:
             config.FINAL_PROJ,
             config.FINAL_LFSA,
             config.FINAL_JVS,
+            config.FINAL_AUSSENHANDEL,
         ],
     }
     config.FETCH_METADATA_FILE.write_text(
@@ -340,8 +409,10 @@ def main() -> None:
     export_excel(lfsa, config.OUTPUT_DIR / config.FINAL_LFSA)
     jvs = finalisiere_stellenquote()
     export_excel(jvs, config.OUTPUT_DIR / config.FINAL_JVS)
+    aussenhandel = finalisiere_aussenhandel()
+    export_excel(aussenhandel, config.OUTPUT_DIR / config.FINAL_AUSSENHANDEL)
     _schreibe_merge_metadata()
-    logger.info("Merge abgeschlossen – 8 finale Tabellen im Output-Pfad.")
+    logger.info("Merge abgeschlossen – 9 finale Tabellen im Output-Pfad.")
 
 
 if __name__ == "__main__":

@@ -55,6 +55,17 @@ MAX_RETRIES = 3             # Max. Versuche bei API-Timeout/-Fehler
 RETRY_BACKOFF_SECONDS = 2   # Basis für exponentielles Backoff
 REQUEST_TIMEOUT = 120       # Sekunden
 
+# ---------------------------------------------------------------------------
+# Eurostat Comext API (DS-045409 – Außenhandel nach HS/KN, SDMX 2.1)
+# ---------------------------------------------------------------------------
+# Comext-Datensätze (Präfix "DS-") liegen auf einem eigenen API-Endpunkt und
+# werden per SDMX-2.1-Schlüssel (statt Query-Parametern) abgefragt:
+#   {COMEXT_BASE_URL}/{dataset}/{freq}.{reporter}.{partner}.{product}.{flow}.{indicators}
+# Die Antwort ist im selben JSON-stat-2.0-Format wie die reguläre
+# Dissemination-API, daher kann ``parse_jsonstat`` unverändert wiederverwendet
+# werden.
+COMEXT_BASE_URL = "https://ec.europa.eu/eurostat/api/comext/dissemination/sdmx/2.1/data"
+
 # EU-27 (EUROSTAT-Codes) und deutsche NUTS-1-Regionen für demo_r_gind3
 EU27_CODES = [
     "BE", "BG", "CZ", "DK", "DE", "EE", "IE", "EL", "ES", "FR",
@@ -235,6 +246,114 @@ DATASETS = {
     },
 }
 
+# ---------------------------------------------------------------------------
+# Außenhandel (DS-045409): Produktgruppen, NACE-Zuordnung, Datensatzdefinition
+# ---------------------------------------------------------------------------
+# Bezeichnung (Produktgruppe) -> zugehörige offizielle Warennummern
+# (KN8-/HS6-/HS4-Codes). Die Bezeichnung wird im Dashboard um die Codes in
+# Klammern ergänzt, z. B. "Verpackung / Folien aus LDPE (39201023, 39201024,
+# 39201025)".
+PRODUKTGRUPPEN = {
+    "Verpackung / Folien aus LDPE": ["39201023", "39201024", "39201025"],
+    "Verpackung / Folien aus HDPE": ["39201028"],
+    "Verpackung / Folien aus Ethylencopolymere/Sonstige": [
+        "39201040", "39201081", "39201089",
+    ],
+    "Verpackung / Folien aus PP": ["39202021", "39202029", "39202080"],
+    "Verpackung / Folien aus PS": ["39203000"],
+    "Verpackung / Folien aus PET + Polyester": [
+        "39206212", "39206219", "39206900",
+    ],
+    "Verpackung / Folien aus Regen. Cellulose": ["39207100"],
+    "Verpackung / Folien aus Celluloseacetat": ["39207380"],
+    "Verpackung / Folien aus PA": ["39209200"],
+    "Verpackung / Folien aus PC": ["39206100"],
+    "Tüten, Beutel, Säcke usw. aus PE": ["39232100"],
+    "Tüten, Beutel, Säcke usw. aus PVC": ["39232910"],
+    "Tüten, Beutel, Säcke usw. aus andere Kunststoffe": ["39232990"],
+    "Flaschen kleiner 2 l": ["39233010"],
+    "Flaschen größer 2 l": ["39233090"],
+    "andere Transportverpackungen": ["39239000"],
+    "Verschlüsse": ["39235010", "39235090"],
+    "Becher, Dosen, Kisten": ["39231010", "39231090"],
+    "Polymere des Ethylens in Primärformen (PE, z. B. LDPE, LLDPE, HDPE)": [
+        "3901",
+    ],
+    "Polymere des Propylens oder anderer Olefine in Primärformen (PP)": [
+        "3902",
+    ],
+    "Polymere des Styrols in Primärformen (PS, EPS)": ["3903"],
+    "Polyacetale, andere Polyether und Epoxidharze in Primärformen; "
+    "Polycarbonate, Alkydharze, Polyallylester und andere Polyester in "
+    "Primärformen": ["3907"],
+    "Erdöl und Öle aus bituminösen Mineralien, roh": ["2709"],
+    "Naphtha (Rohbenzin), Motorenbenzin & Flugbenzin, Spezialbenzine - "
+    "Leichte Öle und Zubereitungen aus Erdöl oder bituminösen Mineralien, "
+    "bei denen >= 90 % des Volumens „einschließlich Verluste“ bei 210 °C "
+    "„nach ASTM D 86“ destillieren (ausgenommen solche, die Biodiesel "
+    "enthalten)": ["271012"],
+}
+
+# Umgekehrte Zuordnung Warennummer -> Produktgruppen-Bezeichnung
+WARENNUMMER_ZU_PRODUKTGRUPPE = {
+    code: bezeichnung
+    for bezeichnung, codes in PRODUKTGRUPPEN.items()
+    for code in codes
+}
+
+# Alle abzurufenden Warennummern (Reihenfolge wie oben definiert)
+AUSSENHANDEL_PRODUKTE = [
+    code for codes in PRODUKTGRUPPEN.values() for code in codes
+]
+
+# NACE-Zuordnung je Warennummer-Präfix (erste Übereinstimmung gewinnt)
+WZ_PRAEFIXE = [
+    (("3923",), "2222"),
+    (("3916", "3917", "3920", "3921"), "2221"),
+    (("3901", "3902", "3903", "3907"), "2016"),
+    (("2709",), "0610"),
+    (("271012",), "1920"),
+]
+
+# Erklärung der NACE-Codes (WZ 2008)
+WZ_LABELS = {
+    "2222": "Herstellung von Verpackungsmitteln aus Kunststoffen",
+    "2221": "Herstellung von Platten, Folien, Schläuchen und Profilen aus "
+            "Kunststoffen",
+    "2016": "Herstellung von Kunststoffen in Primärformen",
+    "0610": "Gewinnung von Erdöl",
+    "1920": "Mineralölverarbeitung",
+}
+
+
+def warennummer_zu_wz(warennummer: str) -> str | None:
+    """Ordnet eine Warennummer anhand ihres Präfixes einem NACE-Code (WZ) zu.
+
+    Gibt ``None`` zurück, wenn keine Zuordnungsregel greift.
+    """
+    code = str(warennummer)
+    for praefixe, wz in WZ_PRAEFIXE:
+        if code.startswith(praefixe):
+            return wz
+    return None
+
+
+DATASETS["ds_045409"] = {
+    "beschreibung": (
+        "Außenhandel – Verpackungen und Kunststoff-Vorprodukte (Menge in "
+        "100 kg), Eurostat Comext DS-045409"
+    ),
+    "dataset_code": "ds-045409",
+    "freq": ["A"],                       # nur jährliche Werte
+    "reporter": ["DE", "EU27_2020"],
+    "partner": [],                       # leer = alle Partnerländer abrufen
+    "product": AUSSENHANDEL_PRODUKTE,
+    "flow": ["1", "2"],                  # 1 = Einfuhr/Import, 2 = Ausfuhr/Export
+    "indicators": ["QUANTITY_IN_100KG"],
+    "start_period": "2015",
+    "datei": "ds_045409_raw.xlsx",
+}
+
 # Dateinamen der finalen (gemergten) Tabellen
 FINAL_LC = "lc_lci_lev_final.xlsx"
 FINAL_MERGE_INDUSTRIE = "merge_industrieproduktion_erzeugerpreise.xlsx"
@@ -244,6 +363,7 @@ FINAL_BEV = "merge_bevoelkerung.xlsx"
 FINAL_PROJ = "proj_25ndbi_final.xlsx"
 FINAL_LFSA = "lfsa_egan22d_final.xlsx"
 FINAL_JVS = "jvs_q_r21_final.xlsx"
+FINAL_AUSSENHANDEL = "aussenhandel_final.xlsx"
 
 # Schlüsselspalten der Merges (Dokumentation der Join-Logik in merge_data.py)
 MERGE_A_KEYS = ["freq", "time", "geo", "nace_r2", "s_adj", "unit"]
