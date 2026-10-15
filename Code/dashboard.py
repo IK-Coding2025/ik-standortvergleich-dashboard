@@ -359,6 +359,8 @@ def linien_chart(
     hover_nachkommastellen: int = 2,
     hover_text_func=None,
     name_immer_kombiniert: bool = False,
+    hover_name_anzeigen: bool = True,
+    hover_datumsformat: str = "%d.%m.%Y",
 ) -> go.Figure:
     """Liniendiagramm mit einer Linie je Gruppenkombination.
 
@@ -374,6 +376,13 @@ def linien_chart(
     gesamten DataFrame konstant ist) – wichtig, wenn die zweite Ebene
     inhaltlich relevant bleibt, auch bei nur einer ausgewählten Ausprägung
     (z. B. Außenhandel: Land + Warengruppe/NACE-Code).
+    ``hover_name_anzeigen=False`` blendet den Reihennamen im Hover-Kasten
+    komplett aus (nur Periode + Wert) – sinnvoll bei sehr langen Namen
+    (z. B. Außenhandel: NACE-/Warengruppen-Texte), die ohnehin bereits in
+    der Legende erkennbar sind, im kombinierten Hover-Kasten (hovermode
+    'x unified') aber nicht umbrechen und abgeschnitten wirken.
+    ``hover_datumsformat`` steuert die Periodendarstellung im Hover
+    (z. B. ``"%Y"`` für nur das Jahr bei jährlichen Daten).
     """
     fig = go.Figure()
     gruppiert = df.dropna(subset=[wert_spalte]).groupby(gruppierung, sort=True)
@@ -382,6 +391,7 @@ def linien_chart(
         name_immer_kombiniert
         or (len(df[gruppierung[-1]].unique()) > 1 if gruppierung else False)
     )
+    extra = "<extra>%{fullData.name}</extra>" if hover_name_anzeigen else "<extra></extra>"
     for schluessel, teil in gruppiert:
         if not isinstance(schluessel, tuple):
             schluessel = (schluessel,)
@@ -392,14 +402,13 @@ def linien_chart(
         if hover_text_func is not None:
             hovertext = teil[wert_spalte].apply(hover_text_func)
             hovertemplate = (
-                "%{x|%d.%m.%Y}<br>Wert: %{hovertext}<extra>%{fullData.name}</extra>"
+                f"%{{x|{hover_datumsformat}}}<br>Wert: %{{hovertext}}{extra}"
             )
         else:
             hovertext = None
             hovertemplate = (
-                "%{x|%d.%m.%Y}<br>Wert: %{y:."
-                f"{hover_nachkommastellen}"
-                "f}<extra>%{fullData.name}</extra>"
+                f"%{{x|{hover_datumsformat}}}<br>Wert: %{{y:."
+                f"{hover_nachkommastellen}f}}{extra}"
             )
         fig.add_trace(
             go.Scatter(
@@ -413,7 +422,13 @@ def linien_chart(
             )
         )
     fig.update_yaxes(title_text=y_achsen_titel)
-    return _basis_layout(fig, titel, legende_unten)
+    fig = _basis_layout(fig, titel, legende_unten)
+    if not hover_name_anzeigen:
+        # Ohne Namen im Hover ist der kombinierte "x unified"-Kasten nicht
+        # mehr nötig; "closest" zeigt pro Reihe einen eigenen, kompakten
+        # Hover-Kasten direkt am Punkt (Periode + Wert, keine Überlänge).
+        fig.update_layout(hovermode="closest")
+    return fig
 
 
 def dual_achsen_chart(
@@ -1885,6 +1900,8 @@ def main() -> None:
                             legende_unten=True,
                             hover_text_func=hover_tonnen,
                             name_immer_kombiniert=True,
+                            hover_name_anzeigen=False,
+                            hover_datumsformat="%Y",
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -1902,6 +1919,8 @@ def main() -> None:
                             legende_unten=True,
                             hover_text_func=hover_tonnen,
                             name_immer_kombiniert=True,
+                            hover_name_anzeigen=False,
+                            hover_datumsformat="%Y",
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -1920,6 +1939,8 @@ def main() -> None:
                             legende_unten=True,
                             hover_text_func=hover_tonnen,
                             name_immer_kombiniert=True,
+                            hover_name_anzeigen=False,
+                            hover_datumsformat="%Y",
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
