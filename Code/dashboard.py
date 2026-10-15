@@ -337,6 +337,12 @@ def _basis_layout(
         height=460,
         margin=dict(l=20, r=20, t=60, b=20),
         plot_bgcolor="white",
+        # namelength=-1: Plotly kürzt lange Reihennamen im Hover-Kasten
+        # sonst standardmäßig auf 15 Zeichen (mit "..."); bei langen
+        # Bezeichnungen (z. B. NACE-/Warengruppen-Texte im Außenhandel-Tab)
+        # soll der volle Text stattdessen umbrechen (Kasten wird höher,
+        # nicht abgeschnitten).
+        hoverlabel=dict(namelength=-1),
     )
     fig.update_xaxes(showgrid=False)
     fig.update_yaxes(gridcolor="#E8E8E8")
@@ -1150,15 +1156,54 @@ def top_partner_balken(rang: pd.DataFrame, titel: str) -> go.Figure:
     return fig
 
 
+def _gruppe_kurzform(label: str) -> str:
+    """Kurzform einer Warengruppen-/NACE-Bezeichnung für Lesebeispiel-Texte.
+
+    NACE-Labels ('2221 – Herstellung von …') werden zu 'WZ 2221';
+    Warengruppen-Labels ('Verpackung / Folien aus LDPE (392…)') werden vor
+    der Klammer mit den Warennummern gekürzt.
+    """
+    text = str(label)
+    if " – " in text:
+        return f"WZ {text.split(' – ')[0]}"
+    return text.split(" (")[0]
+
+
+def _gruppen_aufzaehlung(auswahl_gruppe: list) -> str:
+    """Fasst mehrere ausgewählte Warengruppen/NACE-Codes lesbar zusammen.
+
+    Nennt alle Gruppen explizit (in Kurzform), statt sie bei einer
+    Mehrfachauswahl durch einen unbestimmten Platzhalter zu ersetzen.
+    """
+    kurz = [_gruppe_kurzform(g) for g in auswahl_gruppe]
+    if not kurz:
+        return "keine Auswahl"
+    if len(kurz) <= 4:
+        return ", ".join(kurz)
+    return f"{', '.join(kurz[:3])} und {len(kurz) - 3} weiteren Gruppen"
+
+
+def _summe_je_periode(df: pd.DataFrame) -> pd.DataFrame:
+    """Summiert Werte über alle Gruppen (sub_label) je Periode.
+
+    Notwendig, damit bei einer Mehrfachauswahl (mehrere Warengruppen/
+    NACE-Codes) der tatsächliche Gesamtwert berichtet wird statt nur der
+    Wert einer einzelnen (zufällig ausgewählten) Gruppe.
+    """
+    if df.empty:
+        return df
+    return df.groupby(["time", "time_date"], as_index=False)["value"].sum()
+
+
 def lesebeispiel_aussenhandel_bilanz(
     df_import: pd.DataFrame, df_export: pd.DataFrame, df_bilanz: pd.DataFrame,
     partner_text: str, gruppe_text: str,
 ) -> None:
     """Lesebeispiel zu Import/Export/Außenhandelsbilanz (erste Grafikreihe)."""
     teile = []
-    imp_de = df_import[df_import["geo_label"] == "Deutschland"]
-    exp_de = df_export[df_export["geo_label"] == "Deutschland"]
-    bil_de = df_bilanz[df_bilanz["geo_label"] == "Deutschland"]
+    imp_de = _summe_je_periode(df_import[df_import["geo_label"] == "Deutschland"])
+    exp_de = _summe_je_periode(df_export[df_export["geo_label"] == "Deutschland"])
+    bil_de = _summe_je_periode(df_bilanz[df_bilanz["geo_label"] == "Deutschland"])
 
     wert_imp, _, periode_imp, _ = letzter_wert_mit_vorjahr(imp_de, "value")
     wert_exp, _, periode_exp, _ = letzter_wert_mit_vorjahr(exp_de, "value")
@@ -1884,10 +1929,7 @@ def main() -> None:
                 ", ".join(auswahl_partner) if len(auswahl_partner) <= 3
                 else "mehrere Partnerländer"
             )
-            gruppe_text = (
-                auswahl_gruppe[0] if len(auswahl_gruppe) == 1
-                else "ausgewählte Warengruppen"
-            )
+            gruppe_text = _gruppen_aufzaehlung(auswahl_gruppe)
             lesebeispiel_aussenhandel_bilanz(
                 agg_import, agg_export, bilanz, partner_text, gruppe_text
             )
