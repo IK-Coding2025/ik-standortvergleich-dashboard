@@ -1,0 +1,37 @@
+name: Streamlit-App wach halten
+
+# Haelt die App unter https://ik-standortvergleich.streamlit.app dauerhaft
+# wach: Streamlit Community Cloud versetzt Apps ohne Besuch bereits nach
+# 12 Stunden in den Ruhezustand. Dieser Workflow ruft alle 6 Stunden (und
+# zusaetzlich manuell ueber "Run workflow") den offiziellen Resume-Endpunkt
+# der App auf -- genau der Vorgang, der sonst per Klick auf "Yes, get this
+# app back up!" ausgeloest wird. Kosten: 0 Euro (GitHub Actions ist fuer
+# oeffentliche Repos kostenlos; https://pypi.org/project/streamlit-wakeup/
+# ist ein schlankes Open-Source-Tool, das nur die Pakete "requests"
+# benoetigt).
+#
+# Hinweis: Streamlit stellt diesen Automatismus nicht offiziell zur
+# Verfuegung und koennte ihn kuenftig einschraenken. Falls die App trotz
+# dieses Workflows einschlaeft, bitte im Actions-Tab des Repos unter
+# "Streamlit-App wach halten" den Lauf-Log pruefen.
+
+on:
+  schedule:
+    # Alle 6 Stunden (deutlich innerhalb der 12h-Ruhezustand-Schwelle)
+    - cron: "0 */6 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  wake-up:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Python einrichten
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: streamlit-wakeup installieren
+        run: pip install streamlit-wakeup==0.2.2
+
+      - name: App wach halten / aufwecken
+        run: streamlit-wakeup "https://ik-standortvergleich.streamlit.app"
