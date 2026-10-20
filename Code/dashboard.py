@@ -1881,10 +1881,17 @@ def main() -> None:
             st.info("Keine Daten für die gewählte Filterkombination.")
         else:
             agg = aussenhandel_aggregieren(df_ah, gruppen_spalte)
-            agg_import = agg[agg["flow_label"] == "Import"]
-            agg_export = agg[agg["flow_label"] == "Export"]
+            agg_import = agg[agg["flow_label"] == "Import"].copy()
+            agg_export = agg[agg["flow_label"] == "Export"].copy()
             bilanz = aussenhandelsbilanz(agg)
-            hover_tonnen = lambda v: f"{fmt_de(v * 0.1, 1)} t"
+            # "value" liegt in der Eurostat-Einheit QUANTITY_IN_100KG vor
+            # (100 kg je Einheit). Für die Charts (Achsenskalierung!) und
+            # nicht nur für den Hover-Text wird eine eigene Tonnen-Spalte
+            # gebildet, damit Achsenbeschriftung ("Menge (Tonnen)") und
+            # tatsächlich geplottete Werte konsistent sind.
+            for _df in (agg_import, agg_export, bilanz):
+                _df["wert_tonnen"] = _df["value"] * 0.1
+            hover_tonnen = lambda v: f"{fmt_de(v, 1)} t"
 
             spalte_imp, spalte_exp, spalte_bil = st.columns(3)
             with spalte_imp:
@@ -1894,7 +1901,7 @@ def main() -> None:
                 else:
                     st.plotly_chart(
                         linien_chart(
-                            agg_import, "value",
+                            agg_import, "wert_tonnen",
                             "Import", "Menge (Tonnen)",
                             ["geo_label", "sub_label"],
                             legende_unten=True,
@@ -1913,7 +1920,7 @@ def main() -> None:
                 else:
                     st.plotly_chart(
                         linien_chart(
-                            agg_export, "value",
+                            agg_export, "wert_tonnen",
                             "Export", "Menge (Tonnen)",
                             ["geo_label", "sub_label"],
                             legende_unten=True,
@@ -1932,7 +1939,7 @@ def main() -> None:
                 else:
                     st.plotly_chart(
                         linien_chart(
-                            bilanz, "value",
+                            bilanz, "wert_tonnen",
                             "Außenhandelsbilanz (Export – Import)",
                             "Menge (Tonnen)",
                             ["geo_label", "sub_label"],
