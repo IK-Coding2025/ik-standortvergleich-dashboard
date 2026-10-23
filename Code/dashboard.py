@@ -568,55 +568,84 @@ def lesebeispiel_arbeitskosten(
 
     Erläutert anhand der aktuell gewählten Daten, wie das Niveau (linkes
     Diagramm) und die Wachstumsrate (rechtes Diagramm) zu lesen und zu
-    interpretieren sind.
+    interpretieren sind. Geht dabei je ausgewähltem Indikator
+    (``lcstruct_label``, z. B. 'Arbeitskosten für LCI (Arbeitnehmerentgelt
+    plus Steuern minus Zuschüsse)') einzeln vor, damit bei einer
+    Mehrfachauswahl nicht nur ein zufälliger Wert gezeigt, sondern jeder
+    dargestellte Indikator korrekt benannt wird.
     """
     geos = list(dict.fromkeys(df_eur["geo_label"].dropna()))
     if not geos:
         return
-    referenz = "Deutschland" if "Deutschland" in geos else geos[0]
-    eu = next(
-        (g for g in geos if str(g).startswith("Europäische Union")), None
-    )
-
-    wert_ref, _, periode_ref, _ = letzter_wert_mit_vorjahr(
-        df_eur[df_eur["geo_label"] == referenz], "value"
-    )
-    if wert_ref is None:
+    referenz, eu = _referenz_und_eu(geos)
+    indikatoren = sorted(df_eur["lcstruct_label"].dropna().unique())
+    if not indikatoren:
         return
-    satz_niveau = (
-        f"Im Jahr {periode_ref} betrugen die Arbeitskosten je geleisteter "
-        f"Arbeitsstunde im Verarbeitenden Gewerbe (NACE C) in "
-        f"**{referenz}** **{fmt_de(wert_ref, 1)} EUR**"
-    )
-    if eu and eu != referenz:
-        wert_eu, _, periode_eu, _ = letzter_wert_mit_vorjahr(
-            df_eur[df_eur["geo_label"] == eu], "value"
-        )
-        if wert_eu is not None:
-            abstand = wert_ref - wert_eu
-            satz_niveau += (
-                f", im Durchschnitt der **{eu}** ({periode_eu}) dagegen "
-                f"**{fmt_de(wert_eu, 1)} EUR** – {referenz} liegt damit um "
-                f"{fmt_de(abs(abstand), 1)} EUR bzw. "
-                f"{fmt_de(abs(abstand / wert_eu * 100), 0)} % "
-                f"{'über' if abstand >= 0 else 'unter'} dem EU-Durchschnitt"
-            )
-    satz_niveau += "."
 
-    satz_rate = ""
-    wert_rate, _, periode_rate, _ = letzter_wert_mit_vorjahr(
-        df_rate[df_rate["geo_label"] == referenz], "value"
-    )
-    if wert_rate is not None:
-        satz_rate = (
-            f" Die **Wachstumsrate** (rechtes Diagramm) zeigt die "
-            f"prozentuale Veränderung gegenüber der Vorperiode: Für "
-            f"{referenz} beträgt sie {periode_rate} "
-            f"**{fmt_de(wert_rate, 1)} %**. Eine fallende Kurve bedeutet "
-            f"dabei keinen Rückgang der Arbeitskosten, sondern einen "
-            f"schwächeren Anstieg gegenüber dem Vorjahr."
+    saetze_niveau = []
+    for indikator in indikatoren:
+        wert_ref, _, periode_ref, _ = letzter_wert_mit_vorjahr(
+            df_eur[
+                (df_eur["geo_label"] == referenz)
+                & (df_eur["lcstruct_label"] == indikator)
+            ],
+            "value",
         )
-    st.info(f"**Lesebeispiel:** {satz_niveau}{satz_rate}")
+        if wert_ref is None:
+            continue
+        satz = (
+            f"Im Jahr {periode_ref} betrug der Indikator „{indikator}“ "
+            f"(durchschnittliche Stundenlohnkosten im Verarbeitenden "
+            f"Gewerbe, NACE C) in **{referenz}** **{fmt_de(wert_ref, 1)} "
+            f"EUR** je Stunde"
+        )
+        if eu and eu != referenz:
+            wert_eu, _, periode_eu, _ = letzter_wert_mit_vorjahr(
+                df_eur[
+                    (df_eur["geo_label"] == eu)
+                    & (df_eur["lcstruct_label"] == indikator)
+                ],
+                "value",
+            )
+            if wert_eu is not None:
+                abstand = wert_ref - wert_eu
+                satz += (
+                    f", im Durchschnitt der **{eu}** ({periode_eu}) dagegen "
+                    f"**{fmt_de(wert_eu, 1)} EUR** – {referenz} liegt damit "
+                    f"um {fmt_de(abs(abstand), 1)} EUR bzw. "
+                    f"{fmt_de(abs(abstand / wert_eu * 100), 0)} % "
+                    f"{'über' if abstand >= 0 else 'unter'} dem "
+                    f"EU-Durchschnitt"
+                )
+        saetze_niveau.append(satz + ".")
+    if not saetze_niveau:
+        return
+
+    saetze_rate = []
+    for indikator in indikatoren:
+        wert_rate, _, periode_rate, _ = letzter_wert_mit_vorjahr(
+            df_rate[
+                (df_rate["geo_label"] == referenz)
+                & (df_rate["lcstruct_label"] == indikator)
+            ],
+            "value",
+        )
+        if wert_rate is not None:
+            saetze_rate.append(
+                f"„{indikator}“ ({periode_rate}): **{fmt_de(wert_rate, 1)} %**"
+            )
+
+    text = " ".join(saetze_niveau)
+    if saetze_rate:
+        text += (
+            " Die **Wachstumsrate** (rechtes Diagramm) zeigt die "
+            f"prozentuale Veränderung gegenüber der Vorperiode: für "
+            f"{referenz} betrug sie bei " + "; ".join(saetze_rate) + ". "
+            "Eine fallende Kurve bedeutet dabei keinen Rückgang der "
+            "Arbeitskosten, sondern einen schwächeren Anstieg gegenüber "
+            "dem Vorjahr."
+        )
+    st.info(f"**Lesebeispiel:** {text}")
 
 
 def _referenz_und_eu(geos: list) -> tuple[str | None, str | None]:
@@ -1466,7 +1495,7 @@ def main() -> None:
                     linien_chart(
                         df_eur, "value",
                         "Arbeitskosten in Euro (NACE C – Verarbeitendes Gewerbe)",
-                        "Euro",
+                        "Euro je Stunde (durchschnittliche Stundenlohnkosten)",
                         ["geo_label", "lcstruct_label"],
                     ),
                     use_container_width=True,
