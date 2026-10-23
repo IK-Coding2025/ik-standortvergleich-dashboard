@@ -561,6 +561,16 @@ def zeitraum_filter(df: pd.DataFrame, von: int, bis: int) -> pd.DataFrame:
     return df[jahre.between(von, bis)]
 
 
+def _land_aufzaehlung(teile: list) -> str:
+    """Verbindet eine Liste von Textbausteinen zu einer lesbaren Aufzählung
+    ('A', 'A und B', 'A, B und C')."""
+    if not teile:
+        return ""
+    if len(teile) == 1:
+        return teile[0]
+    return ", ".join(teile[:-1]) + " und " + teile[-1]
+
+
 def lesebeispiel_arbeitskosten(
     df_eur: pd.DataFrame, df_rate: pd.DataFrame
 ) -> None:
@@ -572,51 +582,59 @@ def lesebeispiel_arbeitskosten(
     (``lcstruct_label``, z. B. 'Arbeitskosten für LCI (Arbeitnehmerentgelt
     plus Steuern minus Zuschüsse)') einzeln vor, damit bei einer
     Mehrfachauswahl nicht nur ein zufälliger Wert gezeigt, sondern jeder
-    dargestellte Indikator korrekt benannt wird.
+    dargestellte Indikator korrekt benannt wird. Nennt außerdem **alle**
+    im Diagramm dargestellten Länder/Regionen (nicht nur Referenzland und
+    EU-27), damit der Text zur tatsächlichen Länderauswahl passt.
     """
     geos = list(dict.fromkeys(df_eur["geo_label"].dropna()))
     if not geos:
         return
     referenz, eu = _referenz_und_eu(geos)
+    # Reihenfolge: Referenzland zuerst, danach EU-27, danach weitere
+    # ausgewählte Länder/Regionen (in Auswahlreihenfolge).
+    geordnete_geos = [g for g in (referenz, eu) if g]
+    geordnete_geos += [g for g in geos if g not in geordnete_geos]
     indikatoren = sorted(df_eur["lcstruct_label"].dropna().unique())
     if not indikatoren:
         return
 
     saetze_niveau = []
     for indikator in indikatoren:
-        wert_ref, _, periode_ref, _ = letzter_wert_mit_vorjahr(
-            df_eur[
-                (df_eur["geo_label"] == referenz)
-                & (df_eur["lcstruct_label"] == indikator)
-            ],
-            "value",
-        )
-        if wert_ref is None:
-            continue
-        satz = (
-            f"Im Jahr {periode_ref} betrug der Indikator „{indikator}“ "
-            f"(durchschnittliche Stundenlohnkosten im Verarbeitenden "
-            f"Gewerbe, NACE C) in **{referenz}** **{fmt_de(wert_ref, 1)} "
-            f"EUR** je Stunde"
-        )
-        if eu and eu != referenz:
-            wert_eu, _, periode_eu, _ = letzter_wert_mit_vorjahr(
+        werte = {}
+        for geo in geordnete_geos:
+            wert, _, periode, _ = letzter_wert_mit_vorjahr(
                 df_eur[
-                    (df_eur["geo_label"] == eu)
+                    (df_eur["geo_label"] == geo)
                     & (df_eur["lcstruct_label"] == indikator)
                 ],
                 "value",
             )
-            if wert_eu is not None:
-                abstand = wert_ref - wert_eu
-                satz += (
-                    f", im Durchschnitt der **{eu}** ({periode_eu}) dagegen "
-                    f"**{fmt_de(wert_eu, 1)} EUR** – {referenz} liegt damit "
-                    f"um {fmt_de(abs(abstand), 1)} EUR bzw. "
-                    f"{fmt_de(abs(abstand / wert_eu * 100), 0)} % "
-                    f"{'über' if abstand >= 0 else 'unter'} dem "
-                    f"EU-Durchschnitt"
-                )
+            if wert is not None:
+                werte[geo] = (wert, periode)
+        if not werte:
+            continue
+        periode_haupt = next(iter(werte.values()))[1]
+        land_teile = [
+            (
+                f"im Durchschnitt der **{geo}** **{fmt_de(wert, 1)} EUR**"
+                if geo == eu
+                else f"in **{geo}** **{fmt_de(wert, 1)} EUR**"
+            )
+            for geo, (wert, _) in werte.items()
+        ]
+        satz = (
+            f"Im Jahr {periode_haupt} betrug der Indikator „{indikator}“ "
+            f"je Stunde {_land_aufzaehlung(land_teile)}"
+        )
+        if referenz in werte and eu in werte and eu != referenz:
+            wert_ref = werte[referenz][0]
+            wert_eu = werte[eu][0]
+            abstand = wert_ref - wert_eu
+            satz += (
+                f" – {referenz} liegt damit um {fmt_de(abs(abstand), 1)} "
+                f"EUR bzw. {fmt_de(abs(abstand / wert_eu * 100), 0)} % "
+                f"{'über' if abstand >= 0 else 'unter'} dem EU-Durchschnitt"
+            )
         saetze_niveau.append(satz + ".")
     if not saetze_niveau:
         return
@@ -1473,7 +1491,6 @@ def main() -> None:
             "Arbeitskostenstruktur",
             options=lcstruct_optionen,
             default=standard_label(lcstruct_optionen, "Arbeitskosten für LCI"),
-            format_func=label_kurz_klammer,
         )
         df = df[df["lcstruct_label"].isin(auswahl_lcstruct)]
 
@@ -1495,7 +1512,7 @@ def main() -> None:
                     linien_chart(
                         df_eur, "value",
                         "Arbeitskosten in Euro (NACE C – Verarbeitendes Gewerbe)",
-                        "Euro je Stunde (durchschnittliche Stundenlohnkosten)",
+                        "Durchschnittliche Stundenlohnkosten",
                         ["geo_label", "lcstruct_label"],
                     ),
                     use_container_width=True,
@@ -1791,6 +1808,7 @@ def main() -> None:
                             unit_kurz,
                             ["geo_label", "nace_r2_label"],
                             legende_unten=True,
+                            name_immer_kombiniert=True,
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -1808,6 +1826,7 @@ def main() -> None:
                         unit_kurz,
                         ["geo_label", "nace_r2_label"],
                         legende_unten=True,
+                        name_immer_kombiniert=True,
                     ),
                     use_container_width=True,
                     config={"locale": "de"},
@@ -2166,6 +2185,7 @@ def main() -> None:
                             ["geo_label", "wst_oper_label", "unit_label"],
                             legende_unten=True,
                             hover_nachkommastellen=1,
+                            name_immer_kombiniert=True,
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -2203,6 +2223,7 @@ def main() -> None:
                             ["geo_label", "wst_oper_label", "unit_label"],
                             legende_unten=True,
                             hover_nachkommastellen=1,
+                            name_immer_kombiniert=True,
                         ),
                         use_container_width=True,
                         config={"locale": "de"},
@@ -2368,6 +2389,7 @@ def main() -> None:
                         ["geo_label", "nace_r2_label"],
                         legende_unten=True,
                         hover_text_func=lambda v: f"{v:.1f} Tsd.".replace(".", ","),
+                        name_immer_kombiniert=True,
                     ),
                     use_container_width=True,
                     config={"locale": "de"},
@@ -2403,6 +2425,7 @@ def main() -> None:
                     "%",
                     ["geo_label", "nace_r2_1_label"],
                     legende_unten=True,
+                    name_immer_kombiniert=True,
                 )
                 # X-Achse in Jahresschritten (nur Q1-Ticks)
                 ticks = (
